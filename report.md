@@ -41,7 +41,9 @@ compiled into that project's custom solver):
 gasifier_2d/   2D reacting case + usr_rates.f, usr0.f, usr1.f
 gasifier_3d/   3D version + grid-independence presets (own usr_*.f copies)
 coldflow_2d/   hydrodynamics-only sand case (standard solver, no build)
-postprocess.py results analysis (syngas, carbon conversion, recirc loop)
+postprocess.py results analysis (syngas, performance, carbon, recirc, axial)
+run_case.sh    build + run one case
+sweep.py       parameter sweeps + grid-independence study (drives the solver)
 report.md      this document
 ```
 
@@ -151,6 +153,16 @@ Recommended **staged bring-up** (don't start from the full reacting case):
 5. **3D + grid study** — `gasifier_3d`, coarse → medium → fine; confirm the
    integral outputs (syngas, conversion) stop changing.
 
+Automation (`sweep.py`, after `conda activate mfix-<version>`):
+- `./run_case.sh <case_dir> <project.mfx>` builds and runs a single case.
+- `python sweep.py param <case_dir> <mfx> "<keyword>" v1,v2,... --metric h2co`
+  runs a **parameter sweep** (e.g. inlet O₂ fraction, velocity, bed height)
+  and writes a response curve. Use this to tune the steam/carbon ratio or
+  bed temperature toward a target H₂/CO.
+- `python sweep.py grid <case_dir> <mfx> --metric h2co` runs the
+  **grid-independence study** (coarse/medium/fine) and reports the change
+  between successive meshes.
+
 ## 8. Post-processing
 
 `python postprocess.py <results_dir> [--tail 0.25] [--plot] [--umf sweep.csv]`
@@ -205,8 +217,9 @@ the feed constants (`CHAR_FEED_KG_S`, `CHAR_FRACTION`, `CYCLONE_ETA` in
   values fitted to the target char/tar (TGA / lab gasification data); add
   intrinsic-vs-effective (diffusion-limited) reactivity if relevant.
 - Calibrate the steam/carbon ratio and bed temperature to a target syngas H₂/CO
-  (a parameter sweep over `bc_v_g` / steam fraction / wall temperature).
-- Validate hydrodynamics (Uₘf, bed expansion) and, if available, syngas data.
+  using `sweep.py param` (sweeps `bc_v_g`, inlet O₂/steam fraction, bed height).
+- Validate hydrodynamics (Uₘf via `postprocess.py --umf`, bed expansion) and,
+  if available, syngas data.
 
 A steady-state carbon balance (carbon in feed vs. solid carbon out) is now
 computed by `postprocess.py` from the char fluxes logged by `usr1.f`.
