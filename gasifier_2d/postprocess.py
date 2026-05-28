@@ -7,6 +7,7 @@ gasifier_2d.mfx / gasifier_3d.mfx and reports:
   * dry, tar-free syngas composition at the outlet (mole %), time-averaged
     over the quasi-steady tail of the run, plus the H2/CO ratio
   * char-bed inventory vs time and a carbon-conversion estimate
+  * the cyclone char-return loop (elutriation vs return) from recirc.csv
 
 MFiX writes one CSV per monitor, named after MONITOR_NAME (e.g.
 ``OUTLET_SYNGAS.csv``, ``BED_CHAR.csv``). Column headers vary a little
@@ -160,6 +161,42 @@ def report_conversion(results_dir: str) -> None:
     )
 
 
+def report_recirc(results_dir: str, tail: float, do_plot: bool) -> None:
+    """Summarize the cyclone char-return loop logged by usr0/usr1.f."""
+    path = find_csv(results_dir, "recirc")
+    if not path:
+        print("\n  (no recirc.csv found - skipping char-return loop report)")
+        return
+    print(f"\nCyclone char-return loop  <-  {os.path.basename(path)}")
+    df = pd.read_csv(path)
+    df.columns = [c.strip() for c in df.columns]
+    tcol = time_column(df)
+    cols = [c for c in df.columns if c != tcol]
+    if len(cols) < 2:
+        print("  (unexpected columns; expected elutriation + return)")
+        return
+    elut_col, ret_col = cols[0], cols[1]
+    avg = tail_average(df, tcol, tail)
+    elut, ret = avg[elut_col], avg[ret_col]
+    print(f"  mean char elutriation (last {tail:.0%}): {elut:.4g} kg/s")
+    print(f"  mean char return      (last {tail:.0%}): {ret:.4g} kg/s")
+    if elut > 0:
+        print(f"  effective return ratio: {ret / elut:.2f}  (~cyclone efficiency)")
+    if do_plot:
+        import matplotlib.pyplot as plt
+
+        plt.figure()
+        plt.plot(df[tcol], df[elut_col], label="elutriation")
+        plt.plot(df[tcol], df[ret_col], label="return")
+        plt.xlabel("time [s]")
+        plt.ylabel("char mass flow [kg/s]")
+        plt.legend()
+        plt.title("Cyclone char-return loop")
+        out = "recirc_loop.png"
+        plt.savefig(out, dpi=120, bbox_inches="tight")
+        print(f"  saved plot: {out}")
+
+
 def _plot_syngas(df, tcol, found):
     import matplotlib.pyplot as plt
 
@@ -189,6 +226,7 @@ def main(argv: list[str]) -> int:
 
     report_syngas(args.results_dir, args.tail, args.plot)
     report_conversion(args.results_dir)
+    report_recirc(args.results_dir, args.tail, args.plot)
     return 0
 
 

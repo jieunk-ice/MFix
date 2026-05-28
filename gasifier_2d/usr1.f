@@ -48,8 +48,11 @@
 
 ! Local variables
 !---------------------------------------------------------------------
-      INTEGER :: I, J, K, IJK, IJKM
+      INTEGER :: I, J, K, IJK, IJKM, lun
       DOUBLE PRECISION :: vface, flux_local, flux_global
+! Throttle the CSV log to ~every LOG_DT seconds (not every timestep)
+      DOUBLE PRECISION, PARAMETER :: LOG_DT = 0.05d0
+      DOUBLE PRECISION, SAVE :: t_next = ZERO
 
 !---------------------------------------------------------------------
 
@@ -80,6 +83,15 @@
          PS_MASSFLOW_S(RETURN_PS, CHAR_PHASE) = MAX(ZERO, ETA*flux_global)
       ELSE
          PS_MASSFLOW_S(RETURN_PS, CHAR_PHASE) = ZERO
+      ENDIF
+
+! Log the loop (I/O rank only, throttled) for postprocess.py
+      IF (myPE == PE_IO .AND. TIME >= t_next) THEN
+         OPEN(newunit=lun, file='recirc.csv', position='append', action='write')
+         WRITE(lun,'(ES12.5,",",ES12.5,",",ES12.5)') TIME, flux_global,  &
+               PS_MASSFLOW_S(RETURN_PS, CHAR_PHASE)
+         CLOSE(lun)
+         t_next = TIME + LOG_DT
       ENDIF
 
       RETURN

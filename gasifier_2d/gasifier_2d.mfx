@@ -22,10 +22,11 @@
 #  Companion files in this folder:
 #    usr_rates.f      reaction rate laws (literature-based forms; the
 #                     pre-exponentials still need calibration to your char)
-#    usr1.f           dynamic cyclone char-return coupling (needs CALL_USR)
+#    usr0.f / usr1.f  dynamic cyclone char-return coupling + recirc.csv log
+#                     (needs CALL_USR; writes elutriation/return vs time)
 #    coldflow_2d.mfx  hydrodynamics-only case for Umf / bed-expansion checks
 #    gasifier_3d.mfx  3D version + grid-independence instructions
-#    postprocess.py   syngas composition + carbon conversion from monitors
+#    postprocess.py   syngas composition + carbon conversion + recirc loop
 #
 #  RECOMMENDED FIRST RUN: this full case is stiff. Bring it up in stages -
 #  start from coldflow_2d.mfx to confirm fluidization, then enable energy,
