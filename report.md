@@ -43,6 +43,7 @@ gasifier_3d/   3D version + grid-independence presets (own usr_*.f copies)
 coldflow_2d/   hydrodynamics-only sand case (standard solver, no build)
 postprocess.py results analysis (syngas, performance, carbon, recirc, axial)
 dashboard.py   one-command HTML results dashboard (KPI cards + charts)
+dashboard_app.py  optional interactive Streamlit dashboard
 run_case.sh    build + run one case
 sweep.py       parameter sweeps + grid-independence study (drives the solver)
 report.md      this document
@@ -199,6 +200,14 @@ imports `postprocess.py`'s parsers and constants — so the figures match the CL
 report — needs no server and no dependency beyond `pandas` + `matplotlib`, and
 shows a placeholder for any monitor CSV that is absent (so a partial results
 directory still renders).
+
+An optional interactive variant, `dashboard_app.py`, runs the same metrics
+under Streamlit (`pip install streamlit; streamlit run dashboard_app.py`): a
+sidebar lets you pick the run directory from a dropdown, slide the
+tail-averaging window, and adjust the feed assumptions (BIOMASS_* / cyclone
+efficiency) with the KPIs and charts updating live. It reuses the same parsers
+and `dashboard.py`'s metric logic, so the numbers match the static export and
+the CLI; Streamlit is the only extra dependency.
 
 ## 9. Assumptions and limitations
 

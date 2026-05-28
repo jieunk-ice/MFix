@@ -12,6 +12,7 @@ workflow, and caveats.
 - `gasifier_3d/` — 3D version with grid-independence presets
 - `postprocess.py` — syngas, performance (LHV/yield/CGE), carbon conversion, axial profiles
 - `dashboard.py` — one-command HTML dashboard of a run's results (KPI cards + charts)
+- `dashboard_app.py` — optional interactive Streamlit dashboard (live dir/window/feed controls)
 - `run_case.sh` — build + run a single case
 - `sweep.py` — parameter sweeps and a grid-independence study
 
@@ -28,6 +29,14 @@ the cyclone loop, bed-char inventory, and axial profiles). No server and no
 new dependencies beyond `pandas` + `matplotlib`; missing CSVs degrade to
 placeholders. It reuses `postprocess.py`'s parsers and constants, so the
 numbers match the CLI report.
+
+For an interactive view (pick the run from a dropdown, slide the averaging
+window, tweak the feed assumptions and watch the KPIs update):
+
+```sh
+pip install streamlit          # optional extra dependency
+streamlit run dashboard_app.py
+```
 
 One MFiX project per directory (all `.f` in a directory compile into that
 project's custom solver).
