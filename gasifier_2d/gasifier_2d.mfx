@@ -19,14 +19,13 @@
 #    - cyclone CHAR RETURN point source closes the recirculation loop
 #    - outlet/bed monitors -> CSV for postprocess.py
 #
-#  Companion files in this folder:
-#    usr_rates.f      reaction rate laws (literature-based forms; the
-#                     pre-exponentials still need calibration to your char)
-#    usr0.f / usr1.f  dynamic cyclone char-return coupling + recirc.csv log
-#                     (needs CALL_USR; writes elutriation/return vs time)
-#    coldflow_2d.mfx  hydrodynamics-only case for Umf / bed-expansion checks
-#    gasifier_3d.mfx  3D version + grid-independence instructions
-#    postprocess.py   syngas composition + carbon conversion + recirc loop
+#  Repo layout (one MFiX project per directory):
+#    gasifier_2d/   THIS case + usr_rates.f (literature rate laws),
+#                   usr0.f / usr1.f (dynamic cyclone char return + log)
+#    gasifier_3d/   3D version + grid-independence study (own usr_*.f)
+#    coldflow_2d/   hydrodynamics-only case for Umf / bed-expansion checks
+#    postprocess.py (repo root) syngas composition, carbon conversion,
+#                   and the recirculation loop, from the monitor CSVs
 #
 #  RECOMMENDED FIRST RUN: this full case is stiff. Bring it up in stages -
 #  start from coldflow_2d.mfx to confirm fluidization, then enable energy,
@@ -98,7 +97,8 @@
 #_______________________________________________________________________
 # Gas phase  (ideal-gas mixture; RO_G computed from species, do NOT set ro_g0)
 
-  mu_g0 = 3.5e-5         # constant gas viscosity [Pa.s] (simplification)
+  mu_g0  = 3.5e-5        # constant gas viscosity [Pa.s] (simplification)
+  dif_g0 = 2.0e-4        # constant gas mass diffusivity [m2/s] (~high-T value)
 
   nmax_g = 7
   species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
@@ -127,7 +127,7 @@
   close_packed(1) = .True.
   nmax_s(1) = 2
   species_s(1,1) = 'C(s)'   species_alias_s(1,1) = 'Char'
-  species_s(1,2) = 'Ash'    species_alias_s(1,2) = 'Ash'
+  species_s(1,2) = 'SiO2'   species_alias_s(1,2) = 'Ash'   # silica thermo for ash
   ro_xs0(1,1) = 450.0        # char skeletal density  [kg/m3]
   ro_xs0(1,2) = 2000.0       # ash density            [kg/m3]
   x_s0(1,1)   = 0.90         # baseline char mass fraction
@@ -416,10 +416,10 @@
 #_______________________________________________________________________
 # Notes on thermodynamics
 #   The GUI auto-loads NASA/BURCAT polynomial coefficients for species
-#   whose names match the database (H2O, CO, H2, CO2, CH4, N2, C(s), SiO2).
-#   With the energy equation on, EVERY phase needs thermo data so its
-#   specific heat / enthalpy can be evaluated - including the inert sand
-#   (SiO2 is in the database) and 'Ash'. 'Ash' is NOT a standard entry:
-#   in the GUI, either define its thermo data manually or substitute an
-#   inert like SiO2. For command-line (non-GUI) runs you must append a
+#   whose database names match (H2O, CO, H2, CO2, CH4, N2, C(s), SiO2,
+#   C6H6). With the energy equation on, EVERY phase needs thermo data so
+#   its specific heat / enthalpy can be evaluated. Note 'Ash' has no
+#   standard database entry, so the ash species uses the SiO2 database
+#   name (alias 'Ash') as a stand-in - replace with measured ash thermo
+#   if you have it. For command-line (non-GUI) runs you must append a
 #   THERMO DATA section.

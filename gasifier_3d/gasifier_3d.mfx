@@ -1,11 +1,12 @@
 #  ======================================================================
 #  3D fluidized-bed gasifier  -  biomass char steam gasification (TFM)
 #  ----------------------------------------------------------------------
-#  3D counterpart of gasifier_2d.mfx (square 0.1 x 0.1 m cross-section,
-#  1 m tall). Physics, species, reactions and rate laws are IDENTICAL to
-#  the 2D case - see gasifier_2d.mfx for the detailed rationale/comments.
-#  This deck lives in the same folder so it reuses the SAME usr_rates.f
-#  (the 7 reaction names + species aliases match).
+#  3D counterpart of ../gasifier_2d/gasifier_2d.mfx (square 0.1 x 0.1 m
+#  cross-section, 1 m tall). Physics, species, reactions and rate laws are
+#  IDENTICAL to the 2D case - see that deck for the detailed rationale.
+#  Its own copies of usr_rates.f / usr0.f / usr1.f live in THIS folder
+#  (one MFiX project per directory: all .f here are compiled into the
+#  custom solver). Post-process with ../postprocess.py <results_dir>.
 #
 #  ---- GRID-INDEPENDENCE STUDY -------------------------------------------
 #  Run the SAME physics at increasing resolution and compare an integral
@@ -78,7 +79,8 @@
 #_______________________________________________________________________
 # Gas phase
 
-  mu_g0 = 3.5e-5
+  mu_g0  = 3.5e-5
+  dif_g0 = 2.0e-4            # constant gas mass diffusivity [m2/s]
   nmax_g = 7
   species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
   species_g(2) = 'CO'       species_alias_g(2) = 'CO'
@@ -100,7 +102,7 @@
   d_p0(1) = 5.0e-4   close_packed(1) = .True.
   nmax_s(1) = 2
   species_s(1,1) = 'C(s)'   species_alias_s(1,1) = 'Char'
-  species_s(1,2) = 'Ash'    species_alias_s(1,2) = 'Ash'
+  species_s(1,2) = 'SiO2'   species_alias_s(1,2) = 'Ash'   # silica thermo for ash
   ro_xs0(1,1) = 450.0   ro_xs0(1,2) = 2000.0
   x_s0(1,1) = 0.90      x_s0(1,2) = 0.10
   inert_species(1) = 2
