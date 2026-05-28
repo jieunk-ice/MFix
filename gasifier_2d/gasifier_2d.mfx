@@ -15,10 +15,13 @@
 #      reforming, tar reforming)
 #    - ALLOTHERMAL: constant-temperature heated side walls supply heat
 #    - continuous char feed + volatile release via point sources
+#    - solids OVERFLOW drain (side opening) bounds the bed inventory
+#    - cyclone CHAR RETURN point source closes the recirculation loop
 #    - outlet/bed monitors -> CSV for postprocess.py
 #
 #  Companion files in this folder:
-#    usr_rates.f      reaction rate laws (PLACEHOLDER kinetics - replace)
+#    usr_rates.f      reaction rate laws (literature-based forms; the
+#                     pre-exponentials still need calibration to your char)
 #    coldflow_2d.mfx  hydrodynamics-only case for Umf / bed-expansion checks
 #    gasifier_3d.mfx  3D version + grid-independence instructions
 #    postprocess.py   syngas composition + carbon conversion from monitors
@@ -229,12 +232,35 @@
   bc_tw_s(3,1) = 1173.15
   bc_tw_s(3,2) = 1173.15
 
+  # East wall is SPLIT to leave a side opening that acts as the solids
+  # OVERFLOW DRAIN (see below): lower wall (BC4) + overflow (BC5) + upper
+  # wall (BC6).
   bc_type(4) = 'NSW'
-  bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=1.0
+  bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=0.28
   bc_z_b(4)=0.0  bc_z_t(4)=0.01
   bc_tw_g(4)   = 1173.15
   bc_tw_s(4,1) = 1173.15
   bc_tw_s(4,2) = 1173.15
+
+  bc_type(6) = 'NSW'
+  bc_x_w(6)=0.10 bc_x_e(6)=0.10 bc_y_s(6)=0.32 bc_y_n(6)=1.0
+  bc_z_b(6)=0.0  bc_z_t(6)=0.01
+  bc_tw_g(6)   = 1173.15
+  bc_tw_s(6,1) = 1173.15
+  bc_tw_s(6,2) = 1173.15
+  # ---------------------------------------------------------------------
+
+  # --- BC 5: solids OVERFLOW drain (side opening at the bed surface) -----
+  # Bounds the bed inventory under continuous feed: once the bed expands
+  # past ~0.28 m, gas+solids spill out this side opening (like an overflow
+  # weir / standpipe), so the case can reach a true steady state instead
+  # of filling up. Pressure outflow lets the dense phase leave.
+  #   Caveat: a side PO also bleeds some gas; if that distorts the flow,
+  #   switch to a specified solids mass-outflow ('MO') and tune the rate.
+  bc_type(5) = 'PO'
+  bc_x_w(5)=0.10 bc_x_e(5)=0.10 bc_y_s(5)=0.28 bc_y_n(5)=0.32
+  bc_z_b(5)=0.0  bc_z_t(5)=0.01
+  bc_p_g(5) = 101325.0
   # ---------------------------------------------------------------------
 
 
@@ -264,6 +290,25 @@
   ps_t_g(2)  = 350.0
   ps_x_g(2,7) = 0.7                # Tar (C6H6)
   ps_x_g(2,5) = 0.3                # CH4
+
+  # PS 3: CYCLONE CHAR RETURN (recirculation loop) ----------------------
+  # Char fines elutriate out of the top outlet (BC2); a cyclone captures
+  # them and returns them to the bed. This point source represents that
+  # return leg: it re-injects char low in the bed at the HOT bed
+  # temperature (the loop is internal/refractory-lined, not cooled), and
+  # mostly char (the cyclone separates fines, leaving little ash behind).
+  #   As shipped this is a STATIC return rate. To close the loop
+  #   dynamically (return = collection_efficiency x elutriated char flux),
+  #   measure the char outflow at BC2 in a usr1.f routine and set
+  #   ps_massflow_s(3,1) each step - see chat notes.
+  ps_x_w(3) = 0.0   ps_x_e(3) = 0.02
+  ps_y_s(3) = 0.10  ps_y_n(3) = 0.15
+  ps_z_b(3) = 0.0   ps_z_t(3) = 0.01
+  ps_massflow_s(3,1) = 1.0e-4      # returned char rate [kg/s] (tune to cyclone)
+  ps_t_s(3,1)  = 1123.15           # hot (internally recirculated)
+  ps_x_s(3,1,1) = 0.95             # Char (fines are carbon-rich)
+  ps_x_s(3,1,2) = 0.05             # Ash
+  ps_v_s(3,1)  = 0.05
 
 
 #_______________________________________________________________________

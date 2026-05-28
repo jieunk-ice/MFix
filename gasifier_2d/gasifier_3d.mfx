@@ -172,8 +172,10 @@
   bc_x_w(3)=0.0 bc_x_e(3)=0.0 bc_y_s(3)=0.0 bc_y_n(3)=1.0 bc_z_b(3)=0.0 bc_z_t(3)=0.10
   bc_tw_g(3)=1173.15  bc_tw_s(3,1)=1173.15  bc_tw_s(3,2)=1173.15
 
+  # x-max wall is SPLIT to leave a solids OVERFLOW drain (BC7) at the bed
+  # surface: lower wall (BC4) + overflow PO (BC7) + upper wall (BC8).
   bc_type(4) = 'NSW'
-  bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=1.0 bc_z_b(4)=0.0 bc_z_t(4)=0.10
+  bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=0.28 bc_z_b(4)=0.0 bc_z_t(4)=0.10
   bc_tw_g(4)=1173.15  bc_tw_s(4,1)=1173.15  bc_tw_s(4,2)=1173.15
 
   bc_type(5) = 'NSW'
@@ -183,6 +185,16 @@
   bc_type(6) = 'NSW'
   bc_x_w(6)=0.0 bc_x_e(6)=0.10 bc_y_s(6)=0.0 bc_y_n(6)=1.0 bc_z_b(6)=0.10 bc_z_t(6)=0.10
   bc_tw_g(6)=1173.15  bc_tw_s(6,1)=1173.15  bc_tw_s(6,2)=1173.15
+
+  # BC7: solids overflow drain (side opening at the bed surface)
+  bc_type(7) = 'PO'
+  bc_x_w(7)=0.10 bc_x_e(7)=0.10 bc_y_s(7)=0.28 bc_y_n(7)=0.32 bc_z_b(7)=0.0 bc_z_t(7)=0.10
+  bc_p_g(7) = 101325.0
+
+  # BC8: x-max wall above the overflow
+  bc_type(8) = 'NSW'
+  bc_x_w(8)=0.10 bc_x_e(8)=0.10 bc_y_s(8)=0.32 bc_y_n(8)=1.0 bc_z_b(8)=0.0 bc_z_t(8)=0.10
+  bc_tw_g(8)=1173.15  bc_tw_s(8,1)=1173.15  bc_tw_s(8,2)=1173.15
 
 
 #_______________________________________________________________________
@@ -202,6 +214,15 @@
   ps_massflow_g(2) = 2.0e-4
   ps_t_g(2) = 350.0
   ps_x_g(2,7) = 0.7   ps_x_g(2,5) = 0.3
+
+  # PS 3: cyclone char return (hot, carbon-rich) - see gasifier_2d.mfx
+  ps_x_w(3) = 0.0   ps_x_e(3) = 0.02
+  ps_y_s(3) = 0.10  ps_y_n(3) = 0.15
+  ps_z_b(3) = 0.04  ps_z_t(3) = 0.06
+  ps_massflow_s(3,1) = 1.0e-3
+  ps_t_s(3,1) = 1123.15
+  ps_x_s(3,1,1) = 0.95   ps_x_s(3,1,2) = 0.05
+  ps_v_s(3,1) = 0.05
 
 
 #_______________________________________________________________________
