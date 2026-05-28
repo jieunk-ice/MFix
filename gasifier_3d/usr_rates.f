@@ -2,16 +2,20 @@
 !  usr_rates.f  -  reaction rates for the char steam gasification cases
 !                  (shared by gasifier_2d.mfx and gasifier_3d.mfx)
 !  ----------------------------------------------------------------------
-!  Reactions (order must match the @(RXNS) block in the .mfx):
-!    1 Char_Gasification        Char + H2O --> CO + H2
-!    2 Boudouard                Char + CO2 --> 2 CO
-!    3 Methanation              Char + 2 H2 --> CH4
-!    4 Water_Gas_Shift          CO + H2O --> CO2 + H2
-!    5 Rev_Water_Gas_Shift      CO2 + H2 --> CO + H2O
-!    6 Steam_Methane_Reforming  CH4 + H2O --> CO + 3 H2
-!    7 Tar_Reforming            C6H6 + 6 H2O --> 6 CO + 9 H2
+!  Reactions (referenced by NAME, so @(RXNS) order is free):
+!    Drying                   Moisture --> H2O
+!    Pyrolysis                Biomass --> char + CO + CO2 + CH4 + H2 + H2O + Tar
+!    Char_Gasification        Char + H2O --> CO + H2
+!    Boudouard                Char + CO2 --> 2 CO
+!    Methanation              Char + 2 H2 --> CH4
+!    Water_Gas_Shift          CO + H2O --> CO2 + H2
+!    Rev_Water_Gas_Shift      CO2 + H2 --> CO + H2O
+!    Steam_Methane_Reforming  CH4 + H2O --> CO + 3 H2
+!    Tar_Reforming            C6H6 + 6 H2O --> 6 CO + 9 H2
 !
 !  RATE FORMS (literature-based):
+!    - Devolatilization (drying, pyrolysis) first order in the solid
+!      species (Chan et al. 1985).
 !    - Char-steam and Boudouard use Langmuir-Hinshelwood (LH) forms, which
 !      capture the H2 / CO product inhibition seen in char gasification
 !      (Barrio & Hustad 2001; compiled in Gomez-Barea & Leckner, Prog.
@@ -67,6 +71,7 @@
       DOUBLE PRECISION :: c_H2O, c_CO, c_CO2, c_H2   ! conc [kmol/m3]
       DOUBLE PRECISION :: c_CH4, c_Tar
       DOUBLE PRECISION :: c_Char                ! solid carbon [kmol/m3]
+      DOUBLE PRECISION :: c_Bio, c_Moist        ! biomass / moisture [kmol/m3]
       DOUBLE PRECISION :: r1, r2                ! LH reactivities [1/s]
       DOUBLE PRECISION :: k_wgs, Keq, wgs_net
 
@@ -108,6 +113,14 @@
 !     487): E ~ 200 kJ/mol; A representative (refit to your tar).
       DOUBLE PRECISION, PARAMETER :: A10=1.0d4, E10=2.00d8
 
+! --- Biomass drying  Moisture -> H2O  (Chan, Kelbon, Krieger, Fuel 64
+!     (1985) 1505): k = 5.13e6 exp(-87.9 kJ/mol /RT) [1/s].
+      DOUBLE PRECISION, PARAMETER :: A11=5.13d6, E11=8.79d7
+
+! --- Biomass pyrolysis  Biomass -> char + volatiles (single step; Chan
+!     et al. 1985 / Font et al.): A ~ 1e7 1/s, E ~ 140 kJ/mol.
+      DOUBLE PRECISION, PARAMETER :: A12=1.0d7,  E12=1.40d8
+
 !---------------------------------------------------------------------
 
       RATES(:) = ZERO
@@ -137,8 +150,21 @@
       c_CH4 = RO_g(IJK) * X_g(IJK,CH4) / MW_g(CH4)
       c_Tar = RO_g(IJK) * X_g(IJK,Tar) / MW_g(Tar)
 
-! Solid carbon molar concentration [kmol/m3]
-      c_Char = ROP_s(IJK,1) * X_s(IJK,1,Char) / MW_s(1,Char)
+! Solid-phase molar concentrations [kmol/m3]
+      c_Char  = ROP_s(IJK,1) * X_s(IJK,1,Char)     / MW_s(1,Char)
+      c_Bio   = ROP_s(IJK,1) * X_s(IJK,1,Biomass)  / MW_s(1,Biomass)
+      c_Moist = ROP_s(IJK,1) * X_s(IJK,1,Moisture) / MW_s(1,Moisture)
+
+!---------------------------------------------------------------------
+! Devolatilization (first order, solids temp)
+!   Drying:    Moisture -> H2O
+      IF (c_Moist > SMALL_NUMBER) THEN
+         RATES(Drying) = A11*EXP(-E11/(Rg*Ts)) * c_Moist
+      ENDIF
+!   Pyrolysis: Biomass -> char + volatiles
+      IF (c_Bio > SMALL_NUMBER) THEN
+         RATES(Pyrolysis) = A12*EXP(-E12/(Rg*Ts)) * c_Bio
+      ENDIF
 
 !---------------------------------------------------------------------
 ! (1) Char-steam gasification  (Langmuir-Hinshelwood, solids temp)

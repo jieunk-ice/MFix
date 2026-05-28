@@ -25,11 +25,12 @@ Three Eulerian phases:
 | Phase | Material | Role | Density model |
 |------:|----------|------|---------------|
 | Gas (0) | H₂O, CO, H₂, CO₂, CH₄, N₂, C₆H₆(tar) | reactant/product | ideal-gas mixture |
-| Solids 1 | char + ash | reacting fuel | variable (inert ash) |
+| Solids 1 | biomass, moisture, char, ash | reacting fuel | variable (inert ash) |
 | Solids 2 | silica sand | heat carrier, fluidization | constant (2600 kg/m³) |
 
-Sand dominates the bed inventory and carries the heat; char is a small,
-continuously-replenished fraction.
+Sand dominates the bed inventory and carries the heat. Raw biomass is fed
+continuously; it dries and devolatilizes in situ to char + volatiles, and the
+char then gasifies.
 
 ## 3. Repository layout
 
@@ -79,13 +80,19 @@ pre-exponentials vary by orders of magnitude between chars.
 
 | # | Reaction | ΔH | Rate form | Source |
 |---|----------|----|-----------|--------|
-| 1 | C + H₂O → CO + H₂ | endo | Langmuir–Hinshelwood, pᴴ²ᴼ, H₂ inhib. | Barrio & Hustad 2001 |
-| 2 | C + CO₂ → 2 CO | endo | Langmuir–Hinshelwood, pᶜᴼ², CO inhib. | Barrio et al. 2001 |
-| 3 | C + 2 H₂ → CH₄ | exo | mass-action, [H₂]² | — |
-| 4 | CO + H₂O → CO₂ + H₂ | exo | mass-action (fwd) | Bustamante 2005 |
-| 5 | CO₂ + H₂ → CO + H₂O | endo | reverse via Keq(T) | Moe 1962 |
-| 6 | CH₄ + H₂O → CO + 3 H₂ | endo | mass-action | Jones & Lindstedt 1988 |
-| 7 | C₆H₆ + 6 H₂O → 6 CO + 9 H₂ | endo | mass-action | Jess 1996 |
+| 1 | Moisture → H₂O (drying) | endo | 1st order in moisture | Chan et al. 1985 |
+| 2 | Biomass → char + CO/CO₂/CH₄/H₂/H₂O/tar (pyrolysis) | endo | 1st order in biomass | Chan et al. 1985 |
+| 3 | C + H₂O → CO + H₂ | endo | Langmuir–Hinshelwood, pᴴ²ᴼ, H₂ inhib. | Barrio & Hustad 2001 |
+| 4 | C + CO₂ → 2 CO | endo | Langmuir–Hinshelwood, pᶜᴼ², CO inhib. | Barrio et al. 2001 |
+| 5 | C + 2 H₂ → CH₄ | exo | mass-action, [H₂]² | Biba et al. 1978 |
+| 6 | CO + H₂O → CO₂ + H₂ | exo | mass-action (fwd) | Bustamante 2005 |
+| 7 | CO₂ + H₂ → CO + H₂O | endo | reverse via Keq(T) | Moe 1962 |
+| 8 | CH₄ + H₂O → CO + 3 H₂ | endo | mass-action | Jones & Lindstedt 1988 |
+| 9 | C₆H₆ + 6 H₂O → 6 CO + 9 H₂ | endo | mass-action | Jess 1996 |
+
+Pyrolysis is mass/atom-balanced for a wood surrogate **Biomass = CH₁.₄O₀.₆**
+(MW 23.02): `Biomass → 0.30 C + 0.37 CO + 0.10 CO₂ + 0.05 CH₄ + 0.48 H₂ +
+0.03 H₂O + 0.03 C₆H₆`.
 
 Water-gas shift (4/5) is modelled as a forward/reverse pair: the net rate
 `k(cᶜᴼ·cᴴ²ᴼ − cᶜᴼ²·cᴴ²/Keq)` relaxes the gas toward equilibrium, and its sign
@@ -96,9 +103,10 @@ selects which one-way reaction carries the rate. Char reactivities use the
 
 - **Allothermal heat source.** Constant-temperature side walls (1173 K) supply
   the heat for the net-endothermic chemistry (`bc_tw_g`, `bc_tw_s`, Dirichlet).
-- **Continuous feed (point sources).** PS1 injects char solids (2×10⁻⁴ kg/s,
-  350 K, 90 % char / 10 % ash); PS2 co-injects residual volatiles as gas
-  (tar + CH₄). Mimics a screw feeder + devolatilization.
+- **Continuous biomass feed (point source).** PS1 injects raw wet biomass
+  (350 K; 75 % dry biomass / 10 % moisture / 15 % ash by mass). Drying and
+  pyrolysis (reactions 1–2) then release the moisture and volatiles in situ —
+  there is no longer an artificial injected volatile stream.
 - **Solids overflow drain.** The side wall is split to leave a pressure-outflow
   opening at the bed surface (≈0.28–0.32 m): once the bed expands past it,
   solids spill over, bounding the inventory so the case can reach steady state.
@@ -165,6 +173,9 @@ the feed constants (`CHAR_FEED_KG_S`, `CHAR_FRACTION`, `CYCLONE_ETA` in
   vary between MFiX versions — verify in the GUI Monitors pane.
 - **Ash thermo.** No standard database entry for ash; the ash species uses the
   **SiO₂** database name (alias `Ash`) as a stand-in.
+- **Biomass thermo.** The `Biomass` surrogate (CH₁.₄O₀.₆) is not in any
+  database — you MUST supply its Cp(T) and heat of formation (consistent with
+  the biomass HHV) or the pyrolysis enthalpy / energy balance will be wrong.
 - **Side overflow.** A side pressure-outflow also bleeds some gas; if it
   distorts the flow, switch to a specified solids mass-outflow (`MO`).
 - **`usr1.f` internals.** Face-area array / velocity component for the outlet

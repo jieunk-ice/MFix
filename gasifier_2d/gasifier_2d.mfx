@@ -7,14 +7,15 @@
 #  in the GUI hit "Build" (it compiles usr_rates.f), then "Run".
 #
 #  Physics enabled here:
-#    - gas + 2 TFM solids phases: char+ash (reacting, variable density)
-#      and inert silica sand (heat carrier, drives fluidization)
+#    - gas + 2 TFM solids phases: biomass/char fuel (reacting, variable
+#      density) and inert silica sand (heat carrier, drives fluidization)
 #    - energy equation ON (gasification is strongly endothermic)
-#    - 7 gas species, 3 solid species, 7 reactions (char gasification,
-#      Boudouard, methanation, water-gas-shift fwd/rev, steam-methane
-#      reforming, tar reforming)
+#    - 7 gas species, 4 solid species (char, ash, biomass, moisture),
+#      9 reactions: drying + pyrolysis (devolatilization), char
+#      gasification, Boudouard, methanation, water-gas-shift fwd/rev,
+#      steam-methane reforming, tar reforming
 #    - ALLOTHERMAL: constant-temperature heated side walls supply heat
-#    - continuous char feed + volatile release via point sources
+#    - continuous RAW BIOMASS feed (dries & devolatilizes in situ)
 #    - solids OVERFLOW drain (side opening) bounds the bed inventory
 #    - cyclone CHAR RETURN point source closes the recirculation loop
 #    - outlet/bed monitors -> CSV for postprocess.py
@@ -112,8 +113,9 @@
 
 
 #_______________________________________________________________________
-# Solids phases (TFM, polydisperse: reacting char + inert sand)
-#   Phase 1 = char + ash   (light, low density, consumed by reactions)
+# Solids phases (TFM, polydisperse: reacting biomass/char + inert sand)
+#   Phase 1 = biomass + moisture + char + ash (the fuel: raw biomass dries
+#             and devolatilizes to char + volatiles, char then gasifies)
 #   Phase 2 = sand (SiO2)  (heavy bed material: carries heat, drives
 #                           fluidization, makes up most of the inventory)
 
@@ -123,16 +125,22 @@
 
   ep_star = 0.42             # void at maximum packing (whole solids mixture)
 
-  # --- Phase 1: char + ash (variable density via inert species) ---
-  d_p0(1)         = 5.0e-4   # 500 micron char particles [m]
+  # --- Phase 1: biomass/char fuel (variable density via inert species) ---
+  d_p0(1)         = 5.0e-4   # 500 micron fuel particles [m]
   close_packed(1) = .True.
-  nmax_s(1) = 2
-  species_s(1,1) = 'C(s)'   species_alias_s(1,1) = 'Char'
-  species_s(1,2) = 'SiO2'   species_alias_s(1,2) = 'Ash'   # silica thermo for ash
-  ro_xs0(1,1) = 450.0        # char skeletal density  [kg/m3]
-  ro_xs0(1,2) = 2000.0       # ash density            [kg/m3]
-  x_s0(1,1)   = 0.90         # baseline char mass fraction
+  nmax_s(1) = 4
+  species_s(1,1) = 'C(s)'    species_alias_s(1,1) = 'Char'
+  species_s(1,2) = 'SiO2'    species_alias_s(1,2) = 'Ash'    # silica thermo for ash
+  species_s(1,3) = 'Biomass' species_alias_s(1,3) = 'Biomass' # >>> needs thermo (see note)
+  species_s(1,4) = 'H2O(L)'  species_alias_s(1,4) = 'Moisture'
+  ro_xs0(1,1) = 450.0        # char skeletal density   [kg/m3]
+  ro_xs0(1,2) = 2000.0       # ash density             [kg/m3]
+  ro_xs0(1,3) = 500.0        # raw biomass density     [kg/m3]
+  ro_xs0(1,4) = 1000.0       # moisture (water)        [kg/m3]
+  x_s0(1,1)   = 0.90         # baseline char mass fraction (starting bed)
   x_s0(1,2)   = 0.10         # baseline ash mass fraction
+  x_s0(1,3)   = 0.0          # biomass (enters via the feed)
+  x_s0(1,4)   = 0.0          # moisture (enters via the feed)
   inert_species(1) = 2       # ash is inert (used by density model)
 
   # --- Phase 2: sand / silica (inert, constant density) ---
@@ -175,8 +183,10 @@
   ic_u_s(1,2) = 0.0 ic_v_s(1,2) = 0.0 ic_w_s(1,2) = 0.0
 
   ic_x_g(1,6) = 1.0          # start gas as pure N2
-  ic_x_s(1,1,1) = 0.90       # Char
+  ic_x_s(1,1,1) = 0.90       # Char     (starting bed is char + ash)
   ic_x_s(1,1,2) = 0.10       # Ash
+  ic_x_s(1,1,3) = 0.0        # Biomass  (arrives via the feed)
+  ic_x_s(1,1,4) = 0.0        # Moisture
   ic_x_s(1,2,1) = 1.0        # Sand (pure SiO2)
 
   # --- IC 2: freeboard ---
@@ -193,7 +203,7 @@
   ic_t_s(2,2)= 1123.15
   ic_u_g(2) = 0.0   ic_v_g(2) = 0.0
   ic_x_g(2,6) = 1.0          # N2
-  ic_x_s(2,1,1) = 0.90  ic_x_s(2,1,2) = 0.10
+  ic_x_s(2,1,1) = 0.90  ic_x_s(2,1,2) = 0.10  ic_x_s(2,1,3) = 0.0  ic_x_s(2,1,4) = 0.0
   ic_x_s(2,2,1) = 1.0
 
 
@@ -272,30 +282,26 @@
 
 #_______________________________________________________________________
 # Continuous feed (point sources)
-#   Mimics a screw feeder injecting biomass char into the bed. Char enters
-#   as solids phase 1; residual volatiles (tar + CH4) enter as gas. Point
-#   sources add mass/energy in a region without needing a wall opening.
-#   NOTE: for very long runs add a solids outflow/overflow so the bed
-#   inventory stays bounded; tune the mass flows to your feed rate.
+#   Mimics a screw feeder injecting RAW WET BIOMASS into the bed. Biomass +
+#   moisture + ash enter as solids phase 1; drying and pyrolysis (in the
+#   reactions below) then release the moisture and volatiles in situ - so
+#   there is no longer an artificial volatile injection (old PS2 removed).
+#   NOTE: tune the feed rate; the overflow drain bounds the inventory.
 
-  # PS 1: char solids feed into the lower bed (fed cool, ~350 K)
+  # PS 1: raw biomass feed into the lower bed (fed cool/wet, ~350 K)
   ps_x_w(1) = 0.0   ps_x_e(1) = 0.02
   ps_y_s(1) = 0.05  ps_y_n(1) = 0.10
   ps_z_b(1) = 0.0   ps_z_t(1) = 0.01
-  ps_massflow_s(1,1) = 2.0e-4      # char-phase feed rate [kg/s] (per 2D slice)
+  ps_massflow_s(1,1) = 2.0e-4      # biomass-phase feed rate [kg/s] (per 2D slice)
   ps_t_s(1,1)  = 350.0
-  ps_x_s(1,1,1) = 0.90             # Char
-  ps_x_s(1,1,2) = 0.10             # Ash
+  ps_x_s(1,1,1) = 0.0              # Char     (none in raw feed)
+  ps_x_s(1,1,2) = 0.15             # Ash
+  ps_x_s(1,1,3) = 0.75             # Biomass  (dry)
+  ps_x_s(1,1,4) = 0.10             # Moisture
   ps_v_s(1,1)  = 0.05              # small inward/upward velocity [m/s]
 
-  # PS 2: volatile release (tar + methane) co-located with the feed
-  ps_x_w(2) = 0.0   ps_x_e(2) = 0.02
-  ps_y_s(2) = 0.05  ps_y_n(2) = 0.10
-  ps_z_b(2) = 0.0   ps_z_t(2) = 0.01
-  ps_massflow_g(2) = 2.0e-5        # volatiles gas feed rate [kg/s]
-  ps_t_g(2)  = 350.0
-  ps_x_g(2,7) = 0.7                # Tar (C6H6)
-  ps_x_g(2,5) = 0.3                # CH4
+  # (PS 2 intentionally unused: volatiles now come from pyrolysis, not an
+  #  injected gas stream.)
 
   # PS 3: CYCLONE CHAR RETURN (recirculation loop) ----------------------
   # Char fines elutriate out of the top outlet (BC2); a cyclone captures
@@ -331,8 +337,19 @@
 #
 #   Water-gas shift is modelled as a forward + reverse pair so the gas can
 #   relax toward CO/CO2/H2/H2O equilibrium (Keq(T) is applied in usr_rates).
+#
+#   Devolatilization (drying + pyrolysis) of raw biomass:
+#     Moisture(18) -> H2O(18)                                   (drying)
+#     Pyrolysis is balanced for a wood surrogate Biomass = CH1.4O0.6
+#     (MW 23.02): 1 Biomass -> 0.30 Char + 0.37 CO + 0.10 CO2
+#                 + 0.05 CH4 + 0.48 H2 + 0.03 H2O + 0.03 Tar
+#     (atoms close: C 1.00, H 1.40, O 0.60; mass 23.02 = 23.02)
 
 @(RXNS)
+
+  # --- Devolatilization (gas-solid) ---
+  Drying                  { chem_eq = 'Moisture --> H2O' }          # endothermic
+  Pyrolysis { chem_eq = 'Biomass --> 0.30*Char + 0.37*CO + 0.10*CO2 + 0.05*CH4 + 0.48*H2 + 0.03*H2O + 0.03*Tar' }
 
   # --- Heterogeneous (gas-solid) char reactions ---
   Char_Gasification       { chem_eq = 'Char + H2O --> CO + H2' }   # endothermic
@@ -375,8 +392,9 @@
   vtk_x_g(1,7)  = .True.     # Tar
   vtk_vel_s(1,1)= .True.
   vtk_t_s(1,1)  = .True.
-  vtk_rop_s(1,1)= .True.     # char bulk density (where the char is)
+  vtk_rop_s(1,1)= .True.     # fuel-phase bulk density
   vtk_x_s(1,1,1)= .True.     # Char mass fraction
+  vtk_x_s(1,1,3)= .True.     # Biomass mass fraction (devolatilization front)
   vtk_vel_s(1,2)= .True.
   vtk_t_s(1,2)  = .True.
   vtk_rop_s(1,2)= .True.     # sand bulk density (bed shape / segregation)
@@ -418,9 +436,13 @@
 # Notes on thermodynamics
 #   The GUI auto-loads NASA/BURCAT polynomial coefficients for species
 #   whose database names match (H2O, CO, H2, CO2, CH4, N2, C(s), SiO2,
-#   C6H6). With the energy equation on, EVERY phase needs thermo data so
-#   its specific heat / enthalpy can be evaluated. Note 'Ash' has no
-#   standard database entry, so the ash species uses the SiO2 database
-#   name (alias 'Ash') as a stand-in - replace with measured ash thermo
-#   if you have it. For command-line (non-GUI) runs you must append a
-#   THERMO DATA section.
+#   C6H6, H2O(L)). With the energy equation on, EVERY phase needs thermo.
+#   TWO pseudo-species need user-supplied data:
+#     - 'Ash'     uses the SiO2 database name (alias 'Ash') as a stand-in.
+#     - 'Biomass' (wood surrogate CH1.4O0.6, MW 23.02) is NOT in any
+#       database. You MUST provide its thermo: Cp(T) and a heat of
+#       formation consistent with the biomass HHV (so the pyrolysis heat
+#       is right). Add it in the GUI species editor or the THERMO DATA
+#       section. The pyrolysis enthalpy follows from these formation
+#       enthalpies, so getting Biomass right matters for the energy balance.
+#   For command-line (non-GUI) runs append a THERMO DATA section.

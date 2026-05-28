@@ -100,11 +100,13 @@
   ep_star = 0.42
 
   d_p0(1) = 5.0e-4   close_packed(1) = .True.
-  nmax_s(1) = 2
-  species_s(1,1) = 'C(s)'   species_alias_s(1,1) = 'Char'
-  species_s(1,2) = 'SiO2'   species_alias_s(1,2) = 'Ash'   # silica thermo for ash
-  ro_xs0(1,1) = 450.0   ro_xs0(1,2) = 2000.0
-  x_s0(1,1) = 0.90      x_s0(1,2) = 0.10
+  nmax_s(1) = 4
+  species_s(1,1) = 'C(s)'    species_alias_s(1,1) = 'Char'
+  species_s(1,2) = 'SiO2'    species_alias_s(1,2) = 'Ash'   # silica thermo for ash
+  species_s(1,3) = 'Biomass' species_alias_s(1,3) = 'Biomass' # needs thermo (CH1.4O0.6)
+  species_s(1,4) = 'H2O(L)'  species_alias_s(1,4) = 'Moisture'
+  ro_xs0(1,1) = 450.0   ro_xs0(1,2) = 2000.0   ro_xs0(1,3) = 500.0   ro_xs0(1,4) = 1000.0
+  x_s0(1,1) = 0.90      x_s0(1,2) = 0.10       x_s0(1,3) = 0.0       x_s0(1,4) = 0.0
   inert_species(1) = 2
 
   d_p0(2) = 4.0e-4   ro_s0(2) = 2600.0   close_packed(2) = .True.
@@ -132,7 +134,7 @@
   ic_u_s(1,1)=0.0 ic_v_s(1,1)=0.0 ic_w_s(1,1)=0.0
   ic_u_s(1,2)=0.0 ic_v_s(1,2)=0.0 ic_w_s(1,2)=0.0
   ic_x_g(1,6) = 1.0
-  ic_x_s(1,1,1)=0.90  ic_x_s(1,1,2)=0.10
+  ic_x_s(1,1,1)=0.90  ic_x_s(1,1,2)=0.10  ic_x_s(1,1,3)=0.0  ic_x_s(1,1,4)=0.0
   ic_x_s(1,2,1)=1.0
 
   ic_x_w(2) = 0.0   ic_x_e(2) = 0.10
@@ -144,7 +146,7 @@
   ic_t_g(2) = 1123.15   ic_t_s(2,1) = 1123.15   ic_t_s(2,2) = 1123.15
   ic_u_g(2)=0.0  ic_v_g(2)=0.0  ic_w_g(2)=0.0
   ic_x_g(2,6) = 1.0
-  ic_x_s(2,1,1)=0.90  ic_x_s(2,1,2)=0.10
+  ic_x_s(2,1,1)=0.90  ic_x_s(2,1,2)=0.10  ic_x_s(2,1,3)=0.0  ic_x_s(2,1,4)=0.0
   ic_x_s(2,2,1)=1.0
 
 
@@ -201,22 +203,17 @@
 
 
 #_______________________________________________________________________
-# Continuous char feed (point source)
+# Continuous raw-biomass feed (point source) - dries & devolatilizes in situ
 
   ps_x_w(1) = 0.0   ps_x_e(1) = 0.02
   ps_y_s(1) = 0.05  ps_y_n(1) = 0.10
   ps_z_b(1) = 0.04  ps_z_t(1) = 0.06
   ps_massflow_s(1,1) = 2.0e-3
   ps_t_s(1,1) = 350.0
-  ps_x_s(1,1,1) = 0.90   ps_x_s(1,1,2) = 0.10
+  ps_x_s(1,1,1) = 0.0    ps_x_s(1,1,2) = 0.15   ps_x_s(1,1,3) = 0.75   ps_x_s(1,1,4) = 0.10
   ps_v_s(1,1) = 0.05
 
-  ps_x_w(2) = 0.0   ps_x_e(2) = 0.02
-  ps_y_s(2) = 0.05  ps_y_n(2) = 0.10
-  ps_z_b(2) = 0.04  ps_z_t(2) = 0.06
-  ps_massflow_g(2) = 2.0e-4
-  ps_t_g(2) = 350.0
-  ps_x_g(2,7) = 0.7   ps_x_g(2,5) = 0.3
+  # (PS 2 intentionally unused: volatiles now come from pyrolysis.)
 
   # PS 3: cyclone char return (hot, carbon-rich) - see gasifier_2d.mfx
   ps_x_w(3) = 0.0   ps_x_e(3) = 0.02
@@ -232,6 +229,8 @@
 # Reactions  (identical to gasifier_2d.mfx -> shared usr_rates.f)
 
 @(RXNS)
+  Drying                  { chem_eq = 'Moisture --> H2O' }
+  Pyrolysis { chem_eq = 'Biomass --> 0.30*Char + 0.37*CO + 0.10*CO2 + 0.05*CH4 + 0.48*H2 + 0.03*H2O + 0.03*Tar' }
   Char_Gasification       { chem_eq = 'Char + H2O --> CO + H2' }
   Boudouard               { chem_eq = 'Char + CO2 --> 2.0*CO' }
   Methanation             { chem_eq = 'Char + 2.0*H2 --> CH4' }
