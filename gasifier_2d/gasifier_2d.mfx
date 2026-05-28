@@ -10,16 +10,22 @@
 #    - gas + 2 TFM solids phases: char+ash (reacting, variable density)
 #      and inert silica sand (heat carrier, drives fluidization)
 #    - energy equation ON (gasification is strongly endothermic)
-#    - 6 gas species, 3 solid species, 3 heterogeneous/homogeneous rxns
+#    - 7 gas species, 3 solid species, 7 reactions (char gasification,
+#      Boudouard, methanation, water-gas-shift fwd/rev, steam-methane
+#      reforming, tar reforming)
+#    - ALLOTHERMAL: constant-temperature heated side walls supply heat
+#    - continuous char feed + volatile release via point sources
+#    - outlet/bed monitors -> CSV for postprocess.py
 #
-#  This is an ALLOTHERMAL setup: heat must be supplied to sustain the
-#  endothermic char-steam reaction. As shipped, the bed/steam start hot
-#  (1123 K). For a steady heat source, add heated side walls (see the
-#  commented BC block near the bottom) or couple a combustion step.
+#  Companion files in this folder:
+#    usr_rates.f      reaction rate laws (PLACEHOLDER kinetics - replace)
+#    coldflow_2d.mfx  hydrodynamics-only case for Umf / bed-expansion checks
+#    gasifier_3d.mfx  3D version + grid-independence instructions
+#    postprocess.py   syngas composition + carbon conversion from monitors
 #
-#  Suggested workflow: get it running, THEN turn reactions off
-#  (species_eq=.F., energy_eq=.F.) to first validate cold-flow
-#  fluidization, then re-enable. See chat notes.
+#  RECOMMENDED FIRST RUN: this full case is stiff. Bring it up in stages -
+#  start from coldflow_2d.mfx to confirm fluidization, then enable energy,
+#  then reactions, then feed/walls. See chat notes.
 #  ======================================================================
 
 
@@ -86,13 +92,14 @@
 
   mu_g0 = 3.5e-5         # constant gas viscosity [Pa.s] (simplification)
 
-  nmax_g = 6
+  nmax_g = 7
   species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
   species_g(2) = 'CO'       species_alias_g(2) = 'CO'
   species_g(3) = 'H2'       species_alias_g(3) = 'H2'
   species_g(4) = 'CO2'      species_alias_g(4) = 'CO2'
   species_g(5) = 'CH4'      species_alias_g(5) = 'CH4'
   species_g(6) = 'N2'       species_alias_g(6) = 'N2'
+  species_g(7) = 'C6H6'     species_alias_g(7) = 'Tar'   # benzene tar surrogate
 
 
 #_______________________________________________________________________
@@ -211,24 +218,52 @@
   bc_p_g(2) = 101325.0
 
   # --- BC 3/4: heated walls (ALLOTHERMAL heat source) -------------------
-  # Uncomment to supply heat through the side walls and sustain the
-  # endothermic gasification. Verify the wall-temperature keyword form
-  # against your MFiX version (GUI > Boundary conditions > Thermal).
-  #
-  # bc_type(3) = 'NSW'
-  # bc_x_w(3)=0.0  bc_x_e(3)=0.0  bc_y_s(3)=0.0  bc_y_n(3)=1.0
-  # bc_z_b(3)=0.0  bc_z_t(3)=0.01
-  # bc_tw_g(3)   = 1173.15
-  # bc_tw_s(3,1) = 1173.15
-  # bc_tw_s(3,2) = 1173.15
-  #
-  # bc_type(4) = 'NSW'
-  # bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=1.0
-  # bc_z_b(4)=0.0  bc_z_t(4)=0.01
-  # bc_tw_g(4)   = 1173.15
-  # bc_tw_s(4,1) = 1173.15
-  # bc_tw_s(4,2) = 1173.15
+  # Constant-temperature side walls supply the heat that drives the
+  # endothermic gasification. With BC_HW_T_* left unset, BC_TW_* is a
+  # fixed-temperature (Dirichlet) wall. To run adiabatic instead, delete
+  # the BC_TW_* lines (walls default to no-slip + adiabatic).
+  bc_type(3) = 'NSW'
+  bc_x_w(3)=0.0  bc_x_e(3)=0.0  bc_y_s(3)=0.0  bc_y_n(3)=1.0
+  bc_z_b(3)=0.0  bc_z_t(3)=0.01
+  bc_tw_g(3)   = 1173.15
+  bc_tw_s(3,1) = 1173.15
+  bc_tw_s(3,2) = 1173.15
+
+  bc_type(4) = 'NSW'
+  bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=1.0
+  bc_z_b(4)=0.0  bc_z_t(4)=0.01
+  bc_tw_g(4)   = 1173.15
+  bc_tw_s(4,1) = 1173.15
+  bc_tw_s(4,2) = 1173.15
   # ---------------------------------------------------------------------
+
+
+#_______________________________________________________________________
+# Continuous feed (point sources)
+#   Mimics a screw feeder injecting biomass char into the bed. Char enters
+#   as solids phase 1; residual volatiles (tar + CH4) enter as gas. Point
+#   sources add mass/energy in a region without needing a wall opening.
+#   NOTE: for very long runs add a solids outflow/overflow so the bed
+#   inventory stays bounded; tune the mass flows to your feed rate.
+
+  # PS 1: char solids feed into the lower bed (fed cool, ~350 K)
+  ps_x_w(1) = 0.0   ps_x_e(1) = 0.02
+  ps_y_s(1) = 0.05  ps_y_n(1) = 0.10
+  ps_z_b(1) = 0.0   ps_z_t(1) = 0.01
+  ps_massflow_s(1,1) = 2.0e-4      # char-phase feed rate [kg/s] (per 2D slice)
+  ps_t_s(1,1)  = 350.0
+  ps_x_s(1,1,1) = 0.90             # Char
+  ps_x_s(1,1,2) = 0.10             # Ash
+  ps_v_s(1,1)  = 0.05              # small inward/upward velocity [m/s]
+
+  # PS 2: volatile release (tar + methane) co-located with the feed
+  ps_x_w(2) = 0.0   ps_x_e(2) = 0.02
+  ps_y_s(2) = 0.05  ps_y_n(2) = 0.10
+  ps_z_b(2) = 0.0   ps_z_t(2) = 0.01
+  ps_massflow_g(2) = 2.0e-5        # volatiles gas feed rate [kg/s]
+  ps_t_g(2)  = 350.0
+  ps_x_g(2,7) = 0.7                # Tar (C6H6)
+  ps_x_g(2,5) = 0.3                # CH4
 
 
 #_______________________________________________________________________
@@ -236,18 +271,28 @@
 #   Stoichiometry uses the species ALIASES defined above. Rate laws live
 #   in usr_rates.f (the names below become integer indices into RATES()).
 #   Mass balances (g/mol): all conserve mass - check before editing.
-#     Char(12) + H2O(18) = 30  ->  CO(28) + H2(2) = 30
-#     Char(12) + CO2(44) = 56  ->  2 CO(56)
-#     CO(28) + H2O(18)  = 46   ->  CO2(44) + H2(2) = 46
+#     Char(12) + H2O(18)  = 30  ->  CO(28) + H2(2)   = 30
+#     Char(12) + CO2(44)  = 56  ->  2 CO(56)
+#     Char(12) + 2 H2(4)  = 16  ->  CH4(16)
+#     CO(28)  + H2O(18)   = 46  ->  CO2(44) + H2(2)  = 46   (and reverse)
+#     CH4(16) + H2O(18)   = 34  ->  CO(28) + 3 H2(6) = 34
+#     C6H6(78)+ 6 H2O(108)= 186 ->  6 CO(168)+ 9 H2(18) = 186
+#
+#   Water-gas shift is modelled as a forward + reverse pair so the gas can
+#   relax toward CO/CO2/H2/H2O equilibrium (Keq(T) is applied in usr_rates).
 
 @(RXNS)
 
-  Char_Gasification { chem_eq = 'Char + H2O --> CO + H2' }    # endothermic
-  Boudouard         { chem_eq = 'Char + CO2 --> 2.0*CO' }     # endothermic
-  Water_Gas_Shift   { chem_eq = 'CO + H2O --> CO2 + H2' }     # mild exothermic
+  # --- Heterogeneous (gas-solid) char reactions ---
+  Char_Gasification       { chem_eq = 'Char + H2O --> CO + H2' }   # endothermic
+  Boudouard               { chem_eq = 'Char + CO2 --> 2.0*CO' }    # endothermic
+  Methanation             { chem_eq = 'Char + 2.0*H2 --> CH4' }    # exothermic
 
-  # Optional - uncomment and add a rate in usr_rates.f to include methane:
-  #  Methanation     { chem_eq = 'Char + 2.0*H2 --> CH4' }
+  # --- Homogeneous (gas phase) reactions ---
+  Water_Gas_Shift         { chem_eq = 'CO + H2O --> CO2 + H2' }    # exothermic
+  Rev_Water_Gas_Shift     { chem_eq = 'CO2 + H2 --> CO + H2O' }    # endothermic
+  Steam_Methane_Reforming { chem_eq = 'CH4 + H2O --> CO + 3.0*H2' } # endothermic
+  Tar_Reforming           { chem_eq = 'Tar + 6.0*H2O --> 6.0*CO + 9.0*H2' }
 
 @(END)
 
@@ -275,6 +320,8 @@
   vtk_x_g(1,2)  = .True.     # CO
   vtk_x_g(1,3)  = .True.     # H2
   vtk_x_g(1,4)  = .True.     # CO2
+  vtk_x_g(1,5)  = .True.     # CH4
+  vtk_x_g(1,7)  = .True.     # Tar
   vtk_vel_s(1,1)= .True.
   vtk_t_s(1,1)  = .True.
   vtk_rop_s(1,1)= .True.     # char bulk density (where the char is)
@@ -282,6 +329,38 @@
   vtk_vel_s(1,2)= .True.
   vtk_t_s(1,2)  = .True.
   vtk_rop_s(1,2)= .True.     # sand bulk density (bed shape / segregation)
+
+
+#_______________________________________________________________________
+# Monitors (time-series CSV for post-processing: see postprocess.py)
+#   MON 1: outlet plane - gas species + temperature (syngas composition)
+#   MON 2: bed region    - char bulk density integral (carbon conversion)
+#   monitor_type = 4 is a volume/area average; if your MFiX version
+#   numbers these differently, set it in the GUI (Monitors pane).
+
+  # MON 1: outlet syngas (top plane average)
+  monitor_name(1) = 'outlet_syngas'
+  monitor_type(1) = 4
+  monitor_dt(1)   = 0.05
+  monitor_x_w(1) = 0.0   monitor_x_e(1) = 0.10
+  monitor_y_s(1) = 1.00  monitor_y_n(1) = 1.00
+  monitor_z_b(1) = 0.0   monitor_z_t(1) = 0.01
+  monitor_t_g(1)   = .True.
+  monitor_x_g(1,1) = .True.   # H2O
+  monitor_x_g(1,2) = .True.   # CO
+  monitor_x_g(1,3) = .True.   # H2
+  monitor_x_g(1,4) = .True.   # CO2
+  monitor_x_g(1,5) = .True.   # CH4
+  monitor_x_g(1,7) = .True.   # Tar
+
+  # MON 2: bed char inventory (sum of char bulk density over the bed)
+  monitor_name(2) = 'bed_char'
+  monitor_type(2) = 1          # sum over region
+  monitor_dt(2)   = 0.05
+  monitor_x_w(2) = 0.0   monitor_x_e(2) = 0.10
+  monitor_y_s(2) = 0.0   monitor_y_n(2) = 0.40
+  monitor_z_b(2) = 0.0   monitor_z_t(2) = 0.01
+  monitor_rop_s(2,1) = .True.  # char-phase bulk density
 
 
 #_______________________________________________________________________
