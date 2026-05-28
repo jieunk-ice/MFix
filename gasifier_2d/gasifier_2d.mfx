@@ -430,6 +430,7 @@
   monitor_x_g(1,3) = .True.   # H2
   monitor_x_g(1,4) = .True.   # CO2
   monitor_x_g(1,5) = .True.   # CH4
+  monitor_x_g(1,6) = .True.   # N2  (diluent - needed for LHV per Nm3)
   monitor_x_g(1,7) = .True.   # Tar
 
   # MON 2: bed char inventory (sum of char bulk density over the bed)
@@ -440,6 +441,40 @@
   monitor_y_s(2) = 0.0   monitor_y_n(2) = 0.40
   monitor_z_b(2) = 0.0   monitor_z_t(2) = 0.01
   monitor_rop_s(2,1) = .True.  # char-phase bulk density
+
+  # MON 3: outlet GAS MASS FLOW (for gas yield / cold-gas efficiency).
+  #   monitor_type for a mass flow rate varies by MFiX version - set it in
+  #   the GUI (Monitors > Mass Flow Rate) if this integer is wrong.
+  monitor_name(3) = 'outlet_massflow'
+  monitor_type(3) = 7          # (mass flow rate - VERIFY for your version)
+  monitor_dt(3)   = 0.05
+  monitor_x_w(3) = 0.0   monitor_x_e(3) = 0.10
+  monitor_y_s(3) = 1.00  monitor_y_n(3) = 1.00
+  monitor_z_b(3) = 0.0   monitor_z_t(3) = 0.01
+  monitor_ro_g(3)  = .True.    # mass-flux weighting
+
+  # MON 4-8: axial profile (thin slabs) - T and CO/H2 vs height for
+  #   validation of the reacting-zone structure. postprocess.py assembles
+  #   these into a profile.
+  monitor_name(4) = 'axial_y010'  monitor_type(4) = 4  monitor_dt(4) = 0.10
+  monitor_x_w(4)=0.0 monitor_x_e(4)=0.10 monitor_y_s(4)=0.09 monitor_y_n(4)=0.11 monitor_z_b(4)=0.0 monitor_z_t(4)=0.01
+  monitor_t_g(4)=.True.  monitor_x_g(4,2)=.True.  monitor_x_g(4,3)=.True.
+
+  monitor_name(5) = 'axial_y030'  monitor_type(5) = 4  monitor_dt(5) = 0.10
+  monitor_x_w(5)=0.0 monitor_x_e(5)=0.10 monitor_y_s(5)=0.29 monitor_y_n(5)=0.31 monitor_z_b(5)=0.0 monitor_z_t(5)=0.01
+  monitor_t_g(5)=.True.  monitor_x_g(5,2)=.True.  monitor_x_g(5,3)=.True.
+
+  monitor_name(6) = 'axial_y050'  monitor_type(6) = 4  monitor_dt(6) = 0.10
+  monitor_x_w(6)=0.0 monitor_x_e(6)=0.10 monitor_y_s(6)=0.49 monitor_y_n(6)=0.51 monitor_z_b(6)=0.0 monitor_z_t(6)=0.01
+  monitor_t_g(6)=.True.  monitor_x_g(6,2)=.True.  monitor_x_g(6,3)=.True.
+
+  monitor_name(7) = 'axial_y070'  monitor_type(7) = 4  monitor_dt(7) = 0.10
+  monitor_x_w(7)=0.0 monitor_x_e(7)=0.10 monitor_y_s(7)=0.69 monitor_y_n(7)=0.71 monitor_z_b(7)=0.0 monitor_z_t(7)=0.01
+  monitor_t_g(7)=.True.  monitor_x_g(7,2)=.True.  monitor_x_g(7,3)=.True.
+
+  monitor_name(8) = 'axial_y090'  monitor_type(8) = 4  monitor_dt(8) = 0.10
+  monitor_x_w(8)=0.0 monitor_x_e(8)=0.10 monitor_y_s(8)=0.89 monitor_y_n(8)=0.91 monitor_z_b(8)=0.0 monitor_z_t(8)=0.01
+  monitor_t_g(8)=.True.  monitor_x_g(8,2)=.True.  monitor_x_g(8,3)=.True.
 
 
 #_______________________________________________________________________

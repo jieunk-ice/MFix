@@ -153,15 +153,22 @@ Recommended **staged bring-up** (don't start from the full reacting case):
 
 ## 8. Post-processing
 
-`python postprocess.py <results_dir> [--tail 0.25] [--plot]` reads the monitor
-CSVs and reports:
+`python postprocess.py <results_dir> [--tail 0.25] [--plot] [--umf sweep.csv]`
+reads the monitor CSVs and reports:
 
 - dry, tar-free **syngas composition** (mole %) and **H₂/CO ratio** at the outlet;
+- **performance metrics** — syngas **LHV** (MJ/Nm³), dry **gas yield**
+  (Nm³/kg biomass), **cold-gas efficiency**, and **tar yield** (g/kg); these use
+  the outlet gas mass-flow monitor and the `BIOMASS_*` constants in the script;
 - **carbon conversion** — both an inventory-basis estimate (batch only) and a
   **steady-state carbon balance** `X_C = 1 − (overflow + (1−η)·elutriation) /
-  (fresh char carbon fed)`, using the char fluxes logged by `usr1.f`;
+  (biomass carbon fed)`, using the char fluxes logged by `usr1.f`;
 - the **cyclone recirculation loop** (mean elutriation, return, overflow,
-  return ratio) from `recirc.csv`.
+  return ratio) from `recirc.csv`;
+- an **axial profile** of temperature / CO / H₂ from the `axial_y###` monitors;
+- **minimum fluidization velocity** from a cold-flow sweep file (`--umf`): for
+  each inlet velocity record the steady bed pressure drop; Umf is where the
+  rising dP meets the fluidized plateau.
 
 `usr1.f` logs four columns to `recirc.csv` — time, top elutriation, cyclone
 return, and side-overflow char flux — so the balance closes from the run plus
