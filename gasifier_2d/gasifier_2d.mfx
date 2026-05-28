@@ -1,0 +1,258 @@
+#  ======================================================================
+#  2D bubbling fluidized-bed gasifier - biomass char steam gasification
+#  Two-Fluid Model (TFM, Euler-Euler), reacting + thermal
+#  ----------------------------------------------------------------------
+#  STARTER CASE. Open in the MFiX GUI (File > Open). Because reactions use
+#  user-defined rates (usr_rates.f), this case needs a CUSTOM SOLVER build:
+#  in the GUI hit "Build" (it compiles usr_rates.f), then "Run".
+#
+#  Physics enabled here:
+#    - gas + 1 TFM solids phase (char + ash), variable solids density
+#    - energy equation ON (gasification is strongly endothermic)
+#    - 6 gas species, 2 solid species, 3 heterogeneous/homogeneous rxns
+#
+#  This is an ALLOTHERMAL setup: heat must be supplied to sustain the
+#  endothermic char-steam reaction. As shipped, the bed/steam start hot
+#  (1123 K). For a steady heat source, add heated side walls (see the
+#  commented BC block near the bottom) or couple a combustion step.
+#
+#  Suggested workflow: get it running, THEN turn reactions off
+#  (species_eq=.F., energy_eq=.F.) to first validate cold-flow
+#  fluidization, then re-enable. See chat notes.
+#  ======================================================================
+
+
+#_______________________________________________________________________
+# Run control
+
+  description = 'Biomass char steam gasification - 2D TFM bubbling bed'
+  run_name    = 'gasifier_2d'
+  units       = 'SI'
+  run_type    = 'new'
+
+  time   = 0.0
+  tstop  = 20.0          # long enough to reach quasi-steady syngas output
+  dt     = 1.0000e-4
+  dt_min = 1.0000e-7
+  dt_max = 1.0000e-3
+  dt_fac = 0.9
+
+  energy_eq     = .True.
+  species_eq(0) = .True.   # gas phase species transport
+  species_eq(1) = .True.   # solids phase species transport
+
+  gravity_y = -9.81
+
+  drag_type      = 'SYAMLAL_OBRIEN'
+  turbulence_model = 'NONE'
+
+  # Reactions: stiff ODE integrator is robust for gasification kinetics
+  stiff_chemistry = .True.
+
+
+#_______________________________________________________________________
+# Numerics
+
+  max_nit   = 50
+  tol_resid = 1.0000e-3
+
+  discretize(1:9) = 2 2 2 2 2 2 2 2 2   # 2 = Superbee (2nd order)
+  norm_g = 0.0
+  norm_s = 0.0
+
+
+#_______________________________________________________________________
+# Geometry  (2D: thin in z, no_k)
+
+  coordinates = 'CARTESIAN'
+
+  x_min = 0.0
+  x_max = 0.10           # 10 cm wide
+  y_min = 0.0
+  y_max = 1.00           # 1 m tall
+  z_min = 0.0
+  z_max = 0.01           # single-cell depth
+
+  imax = 20              # 5 mm cells in x
+  jmax = 100             # 10 mm cells in y
+  no_k = .True.          # 2D
+  kmax = 1
+
+
+#_______________________________________________________________________
+# Gas phase  (ideal-gas mixture; RO_G computed from species, do NOT set ro_g0)
+
+  mu_g0 = 3.5e-5         # constant gas viscosity [Pa.s] (simplification)
+
+  nmax_g = 6
+  species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
+  species_g(2) = 'CO'       species_alias_g(2) = 'CO'
+  species_g(3) = 'H2'       species_alias_g(3) = 'H2'
+  species_g(4) = 'CO2'      species_alias_g(4) = 'CO2'
+  species_g(5) = 'CH4'      species_alias_g(5) = 'CH4'
+  species_g(6) = 'N2'       species_alias_g(6) = 'N2'
+
+
+#_______________________________________________________________________
+# Solids phase 1  (char + ash, variable density via inert species)
+
+  mmax = 1
+  solids_model(1) = 'TFM'
+
+  d_p0(1)       = 5.0e-4     # 500 micron char particles [m]
+  close_packed(1) = .True.
+  ep_star       = 0.42       # void at maximum packing
+
+  # Variable solids density: leave ro_s0 unset, give per-species densities
+  nmax_s(1) = 2
+  species_s(1,1) = 'C(s)'   species_alias_s(1,1) = 'Char'
+  species_s(1,2) = 'Ash'    species_alias_s(1,2) = 'Ash'
+  ro_xs0(1,1) = 450.0        # char skeletal density  [kg/m3]
+  ro_xs0(1,2) = 2000.0       # ash density            [kg/m3]
+  x_s0(1,1)   = 0.90         # baseline char mass fraction
+  x_s0(1,2)   = 0.10         # baseline ash mass fraction
+  inert_species(1) = 2       # ash is inert (used by density model)
+
+  # Granular flow (kinetic theory, algebraic for robustness)
+  kt_type = 'ALGEBRAIC'
+  c_e = 0.90                 # particle-particle restitution
+  phi = 30.0                 # angle of internal friction [deg]
+
+
+#_______________________________________________________________________
+# Initial conditions
+#   IC 1: dense bed,  0.00 - 0.30 m  (char bed, hot, inert N2 gas)
+#   IC 2: freeboard,  0.30 - 1.00 m  (gas only, hot)
+
+  # --- IC 1: bed ---
+  ic_x_w(1) = 0.0   ic_x_e(1) = 0.10
+  ic_y_s(1) = 0.0   ic_y_n(1) = 0.30
+  ic_z_b(1) = 0.0   ic_z_t(1) = 0.01
+
+  ic_ep_g(1) = 0.50          # ~50% solids packed bed
+  ic_p_g(1)  = 101325.0
+  ic_t_g(1)  = 1123.15       # 850 C
+  ic_t_s(1,1)= 1123.15
+
+  ic_u_g(1) = 0.0   ic_v_g(1) = 0.0   ic_w_g(1) = 0.0
+  ic_u_s(1,1) = 0.0 ic_v_s(1,1) = 0.0 ic_w_s(1,1) = 0.0
+
+  ic_x_g(1,6) = 1.0          # start gas as pure N2
+  ic_x_s(1,1,1) = 0.90       # Char
+  ic_x_s(1,1,2) = 0.10       # Ash
+
+  # --- IC 2: freeboard ---
+  ic_x_w(2) = 0.0   ic_x_e(2) = 0.10
+  ic_y_s(2) = 0.30  ic_y_n(2) = 1.00
+  ic_z_b(2) = 0.0   ic_z_t(2) = 0.01
+
+  ic_ep_g(2) = 1.0
+  ic_p_g(2)  = 101325.0
+  ic_t_g(2)  = 1123.15
+  ic_t_s(2,1)= 1123.15
+  ic_u_g(2) = 0.0   ic_v_g(2) = 0.0
+  ic_x_g(2,6) = 1.0          # N2
+
+
+#_______________________________________________________________________
+# Boundary conditions
+#   BC 1: bottom distributor - steam (+ N2 carrier) mass inflow
+#   BC 2: top - pressure outflow
+
+  # --- BC 1: steam inlet (bottom) ---
+  bc_type(1) = 'MI'
+  bc_x_w(1) = 0.0   bc_x_e(1) = 0.10
+  bc_y_s(1) = 0.0   bc_y_n(1) = 0.0
+  bc_z_b(1) = 0.0   bc_z_t(1) = 0.01
+
+  bc_ep_g(1) = 1.0
+  bc_p_g(1)  = 101325.0
+  bc_t_g(1)  = 1123.15
+  bc_v_g(1)  = 0.30          # superficial steam velocity [m/s] (> Umf)
+  bc_u_g(1)  = 0.0
+  bc_x_g(1,1) = 0.70         # H2O (steam)
+  bc_x_g(1,6) = 0.30         # N2 carrier / tracer
+
+  # --- BC 2: outlet (top) ---
+  bc_type(2) = 'PO'
+  bc_x_w(2) = 0.0   bc_x_e(2) = 0.10
+  bc_y_s(2) = 1.00  bc_y_n(2) = 1.00
+  bc_z_b(2) = 0.0   bc_z_t(2) = 0.01
+  bc_p_g(2) = 101325.0
+
+  # --- BC 3/4: heated walls (ALLOTHERMAL heat source) -------------------
+  # Uncomment to supply heat through the side walls and sustain the
+  # endothermic gasification. Verify the wall-temperature keyword form
+  # against your MFiX version (GUI > Boundary conditions > Thermal).
+  #
+  # bc_type(3) = 'NSW'
+  # bc_x_w(3)=0.0  bc_x_e(3)=0.0  bc_y_s(3)=0.0  bc_y_n(3)=1.0
+  # bc_z_b(3)=0.0  bc_z_t(3)=0.01
+  # bc_tw_g(3)   = 1173.15
+  # bc_tw_s(3,1) = 1173.15
+  #
+  # bc_type(4) = 'NSW'
+  # bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=1.0
+  # bc_z_b(4)=0.0  bc_z_t(4)=0.01
+  # bc_tw_g(4)   = 1173.15
+  # bc_tw_s(4,1) = 1173.15
+  # ---------------------------------------------------------------------
+
+
+#_______________________________________________________________________
+# Chemical reactions
+#   Stoichiometry uses the species ALIASES defined above. Rate laws live
+#   in usr_rates.f (the names below become integer indices into RATES()).
+#   Mass balances (g/mol): all conserve mass - check before editing.
+#     Char(12) + H2O(18) = 30  ->  CO(28) + H2(2) = 30
+#     Char(12) + CO2(44) = 56  ->  2 CO(56)
+#     CO(28) + H2O(18)  = 46   ->  CO2(44) + H2(2) = 46
+
+@(RXNS)
+
+  Char_Gasification { chem_eq = 'Char + H2O --> CO + H2' }    # endothermic
+  Boudouard         { chem_eq = 'Char + CO2 --> 2.0*CO' }     # endothermic
+  Water_Gas_Shift   { chem_eq = 'CO + H2O --> CO2 + H2' }     # mild exothermic
+
+  # Optional - uncomment and add a rate in usr_rates.f to include methane:
+  #  Methanation     { chem_eq = 'Char + 2.0*H2 --> CH4' }
+
+@(END)
+
+
+#_______________________________________________________________________
+# Output
+
+  res_dt = 0.10              # restart file interval [s]
+
+  write_vtk_files       = .True.
+  time_dependent_filename = .True.
+
+  # VTK region covering the whole domain (open in ParaView)
+  vtk_x_w(1) = 0.0  vtk_x_e(1) = 0.10
+  vtk_y_s(1) = 0.0  vtk_y_n(1) = 1.00
+  vtk_z_b(1) = 0.0  vtk_z_t(1) = 0.01
+  vtk_filebase(1) = 'gasifier'
+  vtk_dt(1) = 0.05
+
+  vtk_ep_g(1)   = .True.
+  vtk_p_g(1)    = .True.
+  vtk_vel_g(1)  = .True.
+  vtk_t_g(1)    = .True.
+  vtk_x_g(1,1)  = .True.     # H2O
+  vtk_x_g(1,2)  = .True.     # CO
+  vtk_x_g(1,3)  = .True.     # H2
+  vtk_x_g(1,4)  = .True.     # CO2
+  vtk_vel_s(1,1)= .True.
+  vtk_t_s(1,1)  = .True.
+  vtk_rop_s(1,1)= .True.     # solids bulk density (bed shape)
+  vtk_x_s(1,1,1)= .True.     # Char
+
+
+#_______________________________________________________________________
+# Notes on thermodynamics
+#   The GUI auto-loads NASA/BURCAT polynomial coefficients for species
+#   whose names match the database (H2O, CO, H2, CO2, CH4, N2, C(s)).
+#   'Ash' is NOT a standard database entry: in the GUI, either define its
+#   thermo data manually or substitute an inert like 'SIO2' (silica).
+#   For command-line (non-GUI) runs you must append a THERMO DATA section.
