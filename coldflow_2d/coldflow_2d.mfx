@@ -1,0 +1,156 @@
+#  ======================================================================
+#  2D COLD-FLOW validation case  -  sand fluidization hydrodynamics only
+#  ----------------------------------------------------------------------
+#  Purpose: validate the bed hydrodynamics BEFORE adding chemistry/heat.
+#  No reactions, no energy equation, no species transport - just gas +
+#  sand. Use this to:
+#    1. Find the minimum fluidization velocity Umf: run a series of inlet
+#       velocities (bc_v_g below), plot bed pressure drop vs velocity, and
+#       read Umf where dP stops rising and plateaus at the bed weight/area.
+#    2. Check bed expansion / bubbling against your expectations or data.
+#  Compare Umf against a correlation (e.g. Wen & Yu) for 400 um silica.
+#
+#  Same geometry/grid as gasifier_2d.mfx so the hydrodynamics carry over.
+#  Runs with the STANDARD solver (no custom build needed).
+#  ======================================================================
+
+
+#_______________________________________________________________________
+# Run control
+
+  description = 'Cold-flow sand fluidization - Umf / bed expansion check'
+  run_name    = 'coldflow_2d'
+  units       = 'SI'
+  run_type    = 'new'
+
+  time   = 0.0
+  tstop  = 5.0
+  dt     = 1.0000e-4
+  dt_min = 1.0000e-7
+  dt_max = 1.0000e-3
+
+  energy_eq     = .False.     # isothermal
+  species_eq(0) = .False.     # no gas species transport
+  species_eq(1) = .False.     # no solids species transport
+
+  gravity_y = -9.81
+  drag_type = 'SYAMLAL_OBRIEN'
+  turbulence_model = 'NONE'
+
+
+#_______________________________________________________________________
+# Numerics
+
+  max_nit   = 50
+  tol_resid = 1.0000e-3
+  discretize(1:9) = 2 2 2 2 2 2 2 2 2
+
+
+#_______________________________________________________________________
+# Geometry  (2D)
+
+  coordinates = 'CARTESIAN'
+  x_min = 0.0   x_max = 0.10
+  y_min = 0.0   y_max = 1.00
+  z_min = 0.0   z_max = 0.01
+  imax = 20
+  jmax = 100
+  no_k = .True.
+  kmax = 1
+
+
+#_______________________________________________________________________
+# Gas phase  (ambient N2; constant properties for a clean Umf test)
+
+  ro_g0 = 1.2                # constant gas density [kg/m3] (ambient air/N2)
+  mu_g0 = 1.8e-5             # constant gas viscosity [Pa.s]
+
+
+#_______________________________________________________________________
+# Solids phase 1  (silica sand, single inert component)
+
+  mmax = 1
+  solids_model(1) = 'TFM'
+  d_p0(1)   = 4.0e-4         # 400 micron
+  ro_s0(1)  = 2600.0         # silica density
+  close_packed(1) = .True.
+  ep_star = 0.42
+
+  kt_type = 'ALGEBRAIC'
+  c_e = 0.90
+  c_f = 0.10
+  phi = 30.0
+
+
+#_______________________________________________________________________
+# Initial conditions
+#   IC 1: settled sand bed 0 - 0.30 m ;  IC 2: freeboard
+
+  ic_x_w(1) = 0.0   ic_x_e(1) = 0.10
+  ic_y_s(1) = 0.0   ic_y_n(1) = 0.30
+  ic_z_b(1) = 0.0   ic_z_t(1) = 0.01
+  ic_ep_g(1) = 0.45
+  ic_p_g(1)  = 101325.0
+  ic_t_g(1)  = 300.0
+  ic_u_g(1) = 0.0   ic_v_g(1) = 0.0
+  ic_u_s(1,1) = 0.0 ic_v_s(1,1) = 0.0
+
+  ic_x_w(2) = 0.0   ic_x_e(2) = 0.10
+  ic_y_s(2) = 0.30  ic_y_n(2) = 1.00
+  ic_z_b(2) = 0.0   ic_z_t(2) = 0.01
+  ic_ep_g(2) = 1.0
+  ic_p_g(2)  = 101325.0
+  ic_t_g(2)  = 300.0
+  ic_u_g(2) = 0.0   ic_v_g(2) = 0.0
+
+
+#_______________________________________________________________________
+# Boundary conditions
+
+  # Bottom: uniform gas inflow. SWEEP THIS VELOCITY to map out Umf:
+  #   e.g. 0.02, 0.05, 0.08, 0.10, 0.15, 0.20, 0.30 m/s (separate runs)
+  bc_type(1) = 'MI'
+  bc_x_w(1) = 0.0   bc_x_e(1) = 0.10
+  bc_y_s(1) = 0.0   bc_y_n(1) = 0.0
+  bc_z_b(1) = 0.0   bc_z_t(1) = 0.01
+  bc_ep_g(1) = 1.0
+  bc_p_g(1)  = 101325.0
+  bc_t_g(1)  = 300.0
+  bc_v_g(1)  = 0.10          # <-- inlet superficial velocity to sweep
+  bc_u_g(1)  = 0.0
+
+  # Top: pressure outflow
+  bc_type(2) = 'PO'
+  bc_x_w(2) = 0.0   bc_x_e(2) = 0.10
+  bc_y_s(2) = 1.00  bc_y_n(2) = 1.00
+  bc_z_b(2) = 0.0   bc_z_t(2) = 0.01
+  bc_p_g(2) = 101325.0
+
+
+#_______________________________________________________________________
+# Output
+
+  res_dt = 0.10
+
+  write_vtk_files = .True.
+  time_dependent_filename = .True.
+  vtk_x_w(1) = 0.0  vtk_x_e(1) = 0.10
+  vtk_y_s(1) = 0.0  vtk_y_n(1) = 1.00
+  vtk_z_b(1) = 0.0  vtk_z_t(1) = 0.01
+  vtk_filebase(1) = 'coldflow'
+  vtk_dt(1) = 0.05
+  vtk_ep_g(1)    = .True.
+  vtk_p_g(1)     = .True.
+  vtk_vel_g(1)   = .True.
+  vtk_vel_s(1,1) = .True.
+  vtk_rop_s(1,1) = .True.
+
+  # Monitor gas pressure just above the distributor (region-average).
+  # Bed pressure drop ~ this minus atmospheric outlet; plateau gives Umf.
+  monitor_name(1) = 'bed_dp'
+  monitor_type(1) = 4
+  monitor_dt(1)   = 0.02
+  monitor_x_w(1) = 0.0    monitor_x_e(1) = 0.10
+  monitor_y_s(1) = 0.0    monitor_y_n(1) = 0.02
+  monitor_z_b(1) = 0.0    monitor_z_t(1) = 0.01
+  monitor_p_g(1)  = .True.

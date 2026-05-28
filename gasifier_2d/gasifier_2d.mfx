@@ -1,0 +1,493 @@
+#  ======================================================================
+#  2D bubbling fluidized-bed gasifier - biomass char steam gasification
+#  Two-Fluid Model (TFM, Euler-Euler), reacting + thermal
+#  ----------------------------------------------------------------------
+#  STARTER CASE. Open in the MFiX GUI (File > Open). Because reactions use
+#  user-defined rates (usr_rates.f), this case needs a CUSTOM SOLVER build:
+#  in the GUI hit "Build" (it compiles usr_rates.f), then "Run".
+#
+#  Physics enabled here:
+#    - gas + 2 TFM solids phases: biomass/char fuel (reacting, variable
+#      density) and inert silica sand (heat carrier, drives fluidization)
+#    - energy equation ON (gasification is strongly endothermic)
+#    - 8 gas species (incl. O2), 4 solid species (char, ash, biomass,
+#      moisture), 13 reactions: drying + pyrolysis (devolatilization),
+#      char gasification, Boudouard, methanation, water-gas-shift fwd/rev,
+#      steam-methane reforming, tar reforming, and char/CO/H2/CH4 combustion
+#    - AUTOTHERMAL: steam + O2 inlet; partial oxidation supplies the heat,
+#      so the side walls are ADIABATIC (uncomment bc_tw_* for allothermal)
+#    - continuous RAW BIOMASS feed (dries & devolatilizes in situ)
+#    - solids OVERFLOW drain (side opening) bounds the bed inventory
+#    - cyclone CHAR RETURN point source closes the recirculation loop
+#    - outlet/bed monitors -> CSV for postprocess.py
+#
+#  Repo layout (one MFiX project per directory):
+#    gasifier_2d/   THIS case + usr_rates.f (literature kinetics in place;
+#                   RECALL: replace with experimental values later),
+#                   usr0.f / usr1.f (dynamic cyclone char return + log)
+#    gasifier_3d/   3D version + grid-independence study (own usr_*.f)
+#    coldflow_2d/   hydrodynamics-only case for Umf / bed-expansion checks
+#    postprocess.py (repo root) syngas composition, carbon conversion,
+#                   and the recirculation loop, from the monitor CSVs
+#
+#  RECOMMENDED FIRST RUN: this full case is stiff. Bring it up in stages -
+#  start from coldflow_2d.mfx to confirm fluidization, then enable energy,
+#  then reactions, then feed/walls. See chat notes.
+#  ======================================================================
+
+
+#_______________________________________________________________________
+# Run control
+
+  description = 'Biomass char steam gasification - 2D TFM bubbling bed'
+  run_name    = 'gasifier_2d'
+  units       = 'SI'
+  run_type    = 'new'
+
+  time   = 0.0
+  tstop  = 20.0          # long enough to reach quasi-steady syngas output
+  dt     = 1.0000e-4
+  dt_min = 1.0000e-7
+  dt_max = 1.0000e-3
+  dt_fac = 0.9
+
+  energy_eq     = .True.
+  species_eq(0) = .True.   # gas phase species transport
+  species_eq(1) = .True.   # solids 1 (char+ash): composition changes -> on
+  species_eq(2) = .False.  # solids 2 (sand): inert single component -> off
+
+  gravity_y = -9.81
+
+  drag_type      = 'SYAMLAL_OBRIEN'
+  turbulence_model = 'NONE'
+
+  # Reactions: stiff ODE integrator is robust for gasification kinetics
+  stiff_chemistry = .True.
+
+  # Call user routines (usr1.f drives the dynamic cyclone char return)
+  call_usr = .True.
+
+
+#_______________________________________________________________________
+# Numerics
+
+  max_nit   = 50
+  tol_resid = 1.0000e-3
+
+  discretize(1:9) = 2 2 2 2 2 2 2 2 2   # 2 = Superbee (2nd order)
+  norm_g = 0.0
+  norm_s = 0.0
+
+
+#_______________________________________________________________________
+# Geometry  (2D: thin in z, no_k)
+
+  coordinates = 'CARTESIAN'
+
+  x_min = 0.0
+  x_max = 0.10           # 10 cm wide
+  y_min = 0.0
+  y_max = 1.00           # 1 m tall
+  z_min = 0.0
+  z_max = 0.01           # single-cell depth
+
+  imax = 20              # 5 mm cells in x
+  jmax = 100             # 10 mm cells in y
+  no_k = .True.          # 2D
+  kmax = 1
+
+
+#_______________________________________________________________________
+# Gas phase  (ideal-gas mixture; RO_G computed from species, do NOT set ro_g0)
+
+  mu_g0  = 3.5e-5        # constant gas viscosity [Pa.s] (simplification)
+  dif_g0 = 2.0e-4        # constant gas mass diffusivity [m2/s] (~high-T value)
+
+  nmax_g = 8
+  species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
+  species_g(2) = 'CO'       species_alias_g(2) = 'CO'
+  species_g(3) = 'H2'       species_alias_g(3) = 'H2'
+  species_g(4) = 'CO2'      species_alias_g(4) = 'CO2'
+  species_g(5) = 'CH4'      species_alias_g(5) = 'CH4'
+  species_g(6) = 'N2'       species_alias_g(6) = 'N2'
+  species_g(7) = 'C6H6'     species_alias_g(7) = 'Tar'   # benzene tar surrogate
+  species_g(8) = 'O2'       species_alias_g(8) = 'O2'    # for autothermal operation
+
+
+#_______________________________________________________________________
+# Solids phases (TFM, polydisperse: reacting biomass/char + inert sand)
+#   Phase 1 = biomass + moisture + char + ash (the fuel: raw biomass dries
+#             and devolatilizes to char + volatiles, char then gasifies)
+#   Phase 2 = sand (SiO2)  (heavy bed material: carries heat, drives
+#                           fluidization, makes up most of the inventory)
+
+  mmax = 2
+  solids_model(1) = 'TFM'
+  solids_model(2) = 'TFM'
+
+  ep_star = 0.42             # void at maximum packing (whole solids mixture)
+
+  # --- Phase 1: biomass/char fuel (variable density via inert species) ---
+  d_p0(1)         = 5.0e-4   # 500 micron fuel particles [m]
+  close_packed(1) = .True.
+  nmax_s(1) = 4
+  species_s(1,1) = 'C(s)'    species_alias_s(1,1) = 'Char'
+  species_s(1,2) = 'SiO2'    species_alias_s(1,2) = 'Ash'    # silica thermo for ash
+  species_s(1,3) = 'Biomass' species_alias_s(1,3) = 'Biomass' # >>> needs thermo (see note)
+  species_s(1,4) = 'H2O(L)'  species_alias_s(1,4) = 'Moisture'
+  ro_xs0(1,1) = 450.0        # char skeletal density   [kg/m3]
+  ro_xs0(1,2) = 2000.0       # ash density             [kg/m3]
+  ro_xs0(1,3) = 500.0        # raw biomass density     [kg/m3]
+  ro_xs0(1,4) = 1000.0       # moisture (water)        [kg/m3]
+  x_s0(1,1)   = 0.90         # baseline char mass fraction (starting bed)
+  x_s0(1,2)   = 0.10         # baseline ash mass fraction
+  x_s0(1,3)   = 0.0          # biomass (enters via the feed)
+  x_s0(1,4)   = 0.0          # moisture (enters via the feed)
+  inert_species(1) = 2       # ash is inert (used by density model)
+
+  # --- Phase 2: sand / silica (inert, constant density) ---
+  d_p0(2)         = 4.0e-4   # 400 micron sand grains [m]
+  ro_s0(2)        = 2600.0   # silica sand density [kg/m3] (constant)
+  close_packed(2) = .True.
+  nmax_s(2) = 1
+  species_s(2,1) = 'SiO2'   species_alias_s(2,1) = 'Sand'
+  x_s0(2,1)   = 1.0          # pure silica
+
+  # Granular flow (kinetic theory, algebraic for robustness)
+  kt_type = 'ALGEBRAIC'
+  c_e = 0.90                 # particle-particle restitution
+  c_f = 0.10                 # particle-particle friction coefficient
+  phi = 30.0                 # angle of internal friction [deg]
+  r_p(1,2) = 0.90            # char-sand restitution coefficient
+
+
+#_______________________________________________________________________
+# Initial conditions
+#   IC 1: dense bed,  0.00 - 0.30 m  (sand-rich, small char load, hot, N2)
+#   IC 2: freeboard,  0.30 - 1.00 m  (gas only, hot)
+#   Volume fractions must satisfy  ep_g + ep_s(1) + ep_s(2) = 1.
+
+  # --- IC 1: bed ---
+  ic_x_w(1) = 0.0   ic_x_e(1) = 0.10
+  ic_y_s(1) = 0.0   ic_y_n(1) = 0.30
+  ic_z_b(1) = 0.0   ic_z_t(1) = 0.01
+
+  ic_ep_g(1)   = 0.45        # 45% voidage (settled bed)
+  ic_ep_s(1,1) = 0.05        # char: small fraction of the inventory
+  ic_ep_s(1,2) = 0.50        # sand: the bulk of the bed
+  ic_p_g(1)  = 101325.0
+  ic_t_g(1)  = 1123.15       # 850 C
+  ic_t_s(1,1)= 1123.15
+  ic_t_s(1,2)= 1123.15
+
+  ic_u_g(1) = 0.0   ic_v_g(1) = 0.0   ic_w_g(1) = 0.0
+  ic_u_s(1,1) = 0.0 ic_v_s(1,1) = 0.0 ic_w_s(1,1) = 0.0
+  ic_u_s(1,2) = 0.0 ic_v_s(1,2) = 0.0 ic_w_s(1,2) = 0.0
+
+  ic_x_g(1,6) = 1.0          # start gas as pure N2
+  ic_x_s(1,1,1) = 0.90       # Char     (starting bed is char + ash)
+  ic_x_s(1,1,2) = 0.10       # Ash
+  ic_x_s(1,1,3) = 0.0        # Biomass  (arrives via the feed)
+  ic_x_s(1,1,4) = 0.0        # Moisture
+  ic_x_s(1,2,1) = 1.0        # Sand (pure SiO2)
+
+  # --- IC 2: freeboard ---
+  ic_x_w(2) = 0.0   ic_x_e(2) = 0.10
+  ic_y_s(2) = 0.30  ic_y_n(2) = 1.00
+  ic_z_b(2) = 0.0   ic_z_t(2) = 0.01
+
+  ic_ep_g(2)   = 1.0
+  ic_ep_s(2,1) = 0.0
+  ic_ep_s(2,2) = 0.0
+  ic_p_g(2)  = 101325.0
+  ic_t_g(2)  = 1123.15
+  ic_t_s(2,1)= 1123.15
+  ic_t_s(2,2)= 1123.15
+  ic_u_g(2) = 0.0   ic_v_g(2) = 0.0
+  ic_x_g(2,6) = 1.0          # N2
+  ic_x_s(2,1,1) = 0.90  ic_x_s(2,1,2) = 0.10  ic_x_s(2,1,3) = 0.0  ic_x_s(2,1,4) = 0.0
+  ic_x_s(2,2,1) = 1.0
+
+
+#_______________________________________________________________________
+# Boundary conditions
+#   BC 1: bottom distributor - steam + O2 (oxygen-blown, AUTOTHERMAL) inflow
+#   BC 2: top - pressure outflow
+
+  # --- BC 1: steam + O2 inlet (bottom) ---
+  # AUTOTHERMAL: the O2 partially oxidizes char/CO/H2 (combustion reactions
+  # below), and that heat drives the endothermic gasification - so the walls
+  # are run ADIABATIC (no bc_tw_*). The O2 fraction sets the equivalence
+  # ratio / how hot the bed runs; raise it for more heat, lower it (-> 0)
+  # to revert toward an allothermal, externally-heated case.
+  bc_type(1) = 'MI'
+  bc_x_w(1) = 0.0   bc_x_e(1) = 0.10
+  bc_y_s(1) = 0.0   bc_y_n(1) = 0.0
+  bc_z_b(1) = 0.0   bc_z_t(1) = 0.01
+
+  bc_ep_g(1) = 1.0
+  bc_p_g(1)  = 101325.0
+  bc_t_g(1)  = 1123.15
+  bc_v_g(1)  = 0.40          # superficial inlet velocity [m/s]
+                             # sand-rich bed is heavier than char alone -
+                             # check against Umf of the binary mixture and
+                             # raise if the bed does not fluidize.
+  bc_u_g(1)  = 0.0
+  bc_x_g(1,1) = 0.55         # H2O (steam)
+  bc_x_g(1,8) = 0.25         # O2  (partial-oxidation heat source)
+  bc_x_g(1,6) = 0.20         # N2  carrier / tracer
+
+  # --- BC 2: outlet (top) ---
+  bc_type(2) = 'PO'
+  bc_x_w(2) = 0.0   bc_x_e(2) = 0.10
+  bc_y_s(2) = 1.00  bc_y_n(2) = 1.00
+  bc_z_b(2) = 0.0   bc_z_t(2) = 0.01
+  bc_p_g(2) = 101325.0
+
+  # --- BC 3/4/6: side walls (ADIABATIC for autothermal operation) ------
+  # No-slip walls with NO fixed temperature: the bed is heated by the
+  # partial-oxidation (combustion) reactions, not the walls. To run
+  # ALLOTHERMAL / hybrid instead, uncomment the bc_tw_* lines (fixed wall
+  # temperature) - and you can then lower or remove the inlet O2.
+  bc_type(3) = 'NSW'
+  bc_x_w(3)=0.0  bc_x_e(3)=0.0  bc_y_s(3)=0.0  bc_y_n(3)=1.0
+  bc_z_b(3)=0.0  bc_z_t(3)=0.01
+  # bc_tw_g(3)=1173.15  bc_tw_s(3,1)=1173.15  bc_tw_s(3,2)=1173.15
+
+  # East wall is SPLIT to leave a side opening that acts as the solids
+  # OVERFLOW DRAIN (see below): lower wall (BC4) + overflow (BC5) + upper
+  # wall (BC6).
+  bc_type(4) = 'NSW'
+  bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=0.28
+  bc_z_b(4)=0.0  bc_z_t(4)=0.01
+  # bc_tw_g(4)=1173.15  bc_tw_s(4,1)=1173.15  bc_tw_s(4,2)=1173.15
+
+  bc_type(6) = 'NSW'
+  bc_x_w(6)=0.10 bc_x_e(6)=0.10 bc_y_s(6)=0.32 bc_y_n(6)=1.0
+  bc_z_b(6)=0.0  bc_z_t(6)=0.01
+  # bc_tw_g(6)=1173.15  bc_tw_s(6,1)=1173.15  bc_tw_s(6,2)=1173.15
+  # ---------------------------------------------------------------------
+
+  # --- BC 5: solids OVERFLOW drain (side opening at the bed surface) -----
+  # Bounds the bed inventory under continuous feed: once the bed expands
+  # past ~0.28 m, gas+solids spill out this side opening (like an overflow
+  # weir / standpipe), so the case can reach a true steady state instead
+  # of filling up. Pressure outflow lets the dense phase leave.
+  #   Caveat: a side PO also bleeds some gas; if that distorts the flow,
+  #   switch to a specified solids mass-outflow ('MO') and tune the rate.
+  bc_type(5) = 'PO'
+  bc_x_w(5)=0.10 bc_x_e(5)=0.10 bc_y_s(5)=0.28 bc_y_n(5)=0.32
+  bc_z_b(5)=0.0  bc_z_t(5)=0.01
+  bc_p_g(5) = 101325.0
+  # ---------------------------------------------------------------------
+
+
+#_______________________________________________________________________
+# Continuous feed (point sources)
+#   Mimics a screw feeder injecting RAW WET BIOMASS into the bed. Biomass +
+#   moisture + ash enter as solids phase 1; drying and pyrolysis (in the
+#   reactions below) then release the moisture and volatiles in situ - so
+#   there is no longer an artificial volatile injection (old PS2 removed).
+#   NOTE: tune the feed rate; the overflow drain bounds the inventory.
+
+  # PS 1: raw biomass feed into the lower bed (fed cool/wet, ~350 K)
+  ps_x_w(1) = 0.0   ps_x_e(1) = 0.02
+  ps_y_s(1) = 0.05  ps_y_n(1) = 0.10
+  ps_z_b(1) = 0.0   ps_z_t(1) = 0.01
+  ps_massflow_s(1,1) = 2.0e-4      # biomass-phase feed rate [kg/s] (per 2D slice)
+  ps_t_s(1,1)  = 350.0
+  ps_x_s(1,1,1) = 0.0              # Char     (none in raw feed)
+  ps_x_s(1,1,2) = 0.15             # Ash
+  ps_x_s(1,1,3) = 0.75             # Biomass  (dry)
+  ps_x_s(1,1,4) = 0.10             # Moisture
+  ps_v_s(1,1)  = 0.05              # small inward/upward velocity [m/s]
+
+  # (PS 2 intentionally unused: volatiles now come from pyrolysis, not an
+  #  injected gas stream.)
+
+  # PS 3: CYCLONE CHAR RETURN (recirculation loop) ----------------------
+  # Char fines elutriate out of the top outlet (BC2); a cyclone captures
+  # them and returns them to the bed. This point source represents that
+  # return leg: it re-injects char low in the bed at the HOT bed
+  # temperature (the loop is internal/refractory-lined, not cooled), and
+  # mostly char (the cyclone separates fines, leaving little ash behind).
+  #   The value below is just the initial/fallback rate: usr1.f OVERWRITES
+  #   ps_massflow_s(3,1) every timestep with ETA x (char elutriated at the
+  #   top outlet), closing the loop dynamically (CALL_USR = .True. above).
+  #   Set ETA / disable in usr1.f, or set CALL_USR=.False. to keep it static.
+  ps_x_w(3) = 0.0   ps_x_e(3) = 0.02
+  ps_y_s(3) = 0.10  ps_y_n(3) = 0.15
+  ps_z_b(3) = 0.0   ps_z_t(3) = 0.01
+  ps_massflow_s(3,1) = 1.0e-4      # initial/fallback rate [kg/s] (usr1.f updates)
+  ps_t_s(3,1)  = 1123.15           # hot (internally recirculated)
+  ps_x_s(3,1,1) = 0.95             # Char (fines are carbon-rich)
+  ps_x_s(3,1,2) = 0.05             # Ash
+  ps_v_s(3,1)  = 0.05
+
+
+#_______________________________________________________________________
+# Chemical reactions
+#   Stoichiometry uses the species ALIASES defined above. Rate laws live
+#   in usr_rates.f (the names below become integer indices into RATES()).
+#   Mass balances (g/mol): all conserve mass - check before editing.
+#     Char(12) + H2O(18)  = 30  ->  CO(28) + H2(2)   = 30
+#     Char(12) + CO2(44)  = 56  ->  2 CO(56)
+#     Char(12) + 2 H2(4)  = 16  ->  CH4(16)
+#     CO(28)  + H2O(18)   = 46  ->  CO2(44) + H2(2)  = 46   (and reverse)
+#     CH4(16) + H2O(18)   = 34  ->  CO(28) + 3 H2(6) = 34
+#     C6H6(78)+ 6 H2O(108)= 186 ->  6 CO(168)+ 9 H2(18) = 186
+#
+#   Water-gas shift is modelled as a forward + reverse pair so the gas can
+#   relax toward CO/CO2/H2/H2O equilibrium (Keq(T) is applied in usr_rates).
+#
+#   Devolatilization (drying + pyrolysis) of raw biomass:
+#     Moisture(18) -> H2O(18)                                   (drying)
+#     Pyrolysis is balanced for a wood surrogate Biomass = CH1.4O0.6
+#     (MW 23.02): 1 Biomass -> 0.30 Char + 0.37 CO + 0.10 CO2
+#                 + 0.05 CH4 + 0.48 H2 + 0.03 H2O + 0.03 Tar
+#     (atoms close: C 1.00, H 1.40, O 0.60; mass 23.02 = 23.02)
+
+@(RXNS)
+
+  # --- Devolatilization (gas-solid) ---
+  Drying                  { chem_eq = 'Moisture --> H2O' }          # endothermic
+  Pyrolysis { chem_eq = 'Biomass --> 0.30*Char + 0.37*CO + 0.10*CO2 + 0.05*CH4 + 0.48*H2 + 0.03*H2O + 0.03*Tar' }
+
+  # --- Combustion / partial oxidation (AUTOTHERMAL heat source) ---
+  #   Char(12)+O2(32)=44 -> CO2(44); CO+0.5O2 -> CO2; H2+0.5O2 -> H2O;
+  #   CH4+2O2 -> CO2+2H2O. All exothermic - these supply the bed heat.
+  Char_Combustion         { chem_eq = 'Char + O2 --> CO2' }        # exothermic
+  CO_Combustion           { chem_eq = 'CO + 0.5*O2 --> CO2' }      # exothermic
+  H2_Combustion           { chem_eq = 'H2 + 0.5*O2 --> H2O' }      # exothermic
+  CH4_Combustion          { chem_eq = 'CH4 + 2.0*O2 --> CO2 + 2.0*H2O' } # exothermic
+
+  # --- Heterogeneous (gas-solid) char reactions ---
+  Char_Gasification       { chem_eq = 'Char + H2O --> CO + H2' }   # endothermic
+  Boudouard               { chem_eq = 'Char + CO2 --> 2.0*CO' }    # endothermic
+  Methanation             { chem_eq = 'Char + 2.0*H2 --> CH4' }    # exothermic
+
+  # --- Homogeneous (gas phase) reactions ---
+  Water_Gas_Shift         { chem_eq = 'CO + H2O --> CO2 + H2' }    # exothermic
+  Rev_Water_Gas_Shift     { chem_eq = 'CO2 + H2 --> CO + H2O' }    # endothermic
+  Steam_Methane_Reforming { chem_eq = 'CH4 + H2O --> CO + 3.0*H2' } # endothermic
+  Tar_Reforming           { chem_eq = 'Tar + 6.0*H2O --> 6.0*CO + 9.0*H2' }
+
+@(END)
+
+
+#_______________________________________________________________________
+# Output
+
+  res_dt = 0.10              # restart file interval [s]
+
+  write_vtk_files       = .True.
+  time_dependent_filename = .True.
+
+  # VTK region covering the whole domain (open in ParaView)
+  vtk_x_w(1) = 0.0  vtk_x_e(1) = 0.10
+  vtk_y_s(1) = 0.0  vtk_y_n(1) = 1.00
+  vtk_z_b(1) = 0.0  vtk_z_t(1) = 0.01
+  vtk_filebase(1) = 'gasifier'
+  vtk_dt(1) = 0.05
+
+  vtk_ep_g(1)   = .True.
+  vtk_p_g(1)    = .True.
+  vtk_vel_g(1)  = .True.
+  vtk_t_g(1)    = .True.
+  vtk_x_g(1,1)  = .True.     # H2O
+  vtk_x_g(1,2)  = .True.     # CO
+  vtk_x_g(1,3)  = .True.     # H2
+  vtk_x_g(1,4)  = .True.     # CO2
+  vtk_x_g(1,5)  = .True.     # CH4
+  vtk_x_g(1,7)  = .True.     # Tar
+  vtk_vel_s(1,1)= .True.
+  vtk_t_s(1,1)  = .True.
+  vtk_rop_s(1,1)= .True.     # fuel-phase bulk density
+  vtk_x_s(1,1,1)= .True.     # Char mass fraction
+  vtk_x_s(1,1,3)= .True.     # Biomass mass fraction (devolatilization front)
+  vtk_vel_s(1,2)= .True.
+  vtk_t_s(1,2)  = .True.
+  vtk_rop_s(1,2)= .True.     # sand bulk density (bed shape / segregation)
+
+
+#_______________________________________________________________________
+# Monitors (time-series CSV for post-processing: see postprocess.py)
+#   MON 1: outlet plane - gas species + temperature (syngas composition)
+#   MON 2: bed region    - char bulk density integral (carbon conversion)
+#   monitor_type = 4 is a volume/area average; if your MFiX version
+#   numbers these differently, set it in the GUI (Monitors pane).
+
+  # MON 1: outlet syngas (top plane average)
+  monitor_name(1) = 'outlet_syngas'
+  monitor_type(1) = 4
+  monitor_dt(1)   = 0.05
+  monitor_x_w(1) = 0.0   monitor_x_e(1) = 0.10
+  monitor_y_s(1) = 1.00  monitor_y_n(1) = 1.00
+  monitor_z_b(1) = 0.0   monitor_z_t(1) = 0.01
+  monitor_t_g(1)   = .True.
+  monitor_x_g(1,1) = .True.   # H2O
+  monitor_x_g(1,2) = .True.   # CO
+  monitor_x_g(1,3) = .True.   # H2
+  monitor_x_g(1,4) = .True.   # CO2
+  monitor_x_g(1,5) = .True.   # CH4
+  monitor_x_g(1,6) = .True.   # N2  (diluent - needed for LHV per Nm3)
+  monitor_x_g(1,7) = .True.   # Tar
+
+  # MON 2: bed char inventory (sum of char bulk density over the bed)
+  monitor_name(2) = 'bed_char'
+  monitor_type(2) = 1          # sum over region
+  monitor_dt(2)   = 0.05
+  monitor_x_w(2) = 0.0   monitor_x_e(2) = 0.10
+  monitor_y_s(2) = 0.0   monitor_y_n(2) = 0.40
+  monitor_z_b(2) = 0.0   monitor_z_t(2) = 0.01
+  monitor_rop_s(2,1) = .True.  # char-phase bulk density
+
+  # MON 3: outlet GAS MASS FLOW (for gas yield / cold-gas efficiency).
+  #   monitor_type for a mass flow rate varies by MFiX version - set it in
+  #   the GUI (Monitors > Mass Flow Rate) if this integer is wrong.
+  monitor_name(3) = 'outlet_massflow'
+  monitor_type(3) = 7          # (mass flow rate - VERIFY for your version)
+  monitor_dt(3)   = 0.05
+  monitor_x_w(3) = 0.0   monitor_x_e(3) = 0.10
+  monitor_y_s(3) = 1.00  monitor_y_n(3) = 1.00
+  monitor_z_b(3) = 0.0   monitor_z_t(3) = 0.01
+  monitor_ro_g(3)  = .True.    # mass-flux weighting
+
+  # MON 4-8: axial profile (thin slabs) - T and CO/H2 vs height for
+  #   validation of the reacting-zone structure. postprocess.py assembles
+  #   these into a profile.
+  monitor_name(4) = 'axial_y010'  monitor_type(4) = 4  monitor_dt(4) = 0.10
+  monitor_x_w(4)=0.0 monitor_x_e(4)=0.10 monitor_y_s(4)=0.09 monitor_y_n(4)=0.11 monitor_z_b(4)=0.0 monitor_z_t(4)=0.01
+  monitor_t_g(4)=.True.  monitor_x_g(4,2)=.True.  monitor_x_g(4,3)=.True.
+
+  monitor_name(5) = 'axial_y030'  monitor_type(5) = 4  monitor_dt(5) = 0.10
+  monitor_x_w(5)=0.0 monitor_x_e(5)=0.10 monitor_y_s(5)=0.29 monitor_y_n(5)=0.31 monitor_z_b(5)=0.0 monitor_z_t(5)=0.01
+  monitor_t_g(5)=.True.  monitor_x_g(5,2)=.True.  monitor_x_g(5,3)=.True.
+
+  monitor_name(6) = 'axial_y050'  monitor_type(6) = 4  monitor_dt(6) = 0.10
+  monitor_x_w(6)=0.0 monitor_x_e(6)=0.10 monitor_y_s(6)=0.49 monitor_y_n(6)=0.51 monitor_z_b(6)=0.0 monitor_z_t(6)=0.01
+  monitor_t_g(6)=.True.  monitor_x_g(6,2)=.True.  monitor_x_g(6,3)=.True.
+
+  monitor_name(7) = 'axial_y070'  monitor_type(7) = 4  monitor_dt(7) = 0.10
+  monitor_x_w(7)=0.0 monitor_x_e(7)=0.10 monitor_y_s(7)=0.69 monitor_y_n(7)=0.71 monitor_z_b(7)=0.0 monitor_z_t(7)=0.01
+  monitor_t_g(7)=.True.  monitor_x_g(7,2)=.True.  monitor_x_g(7,3)=.True.
+
+  monitor_name(8) = 'axial_y090'  monitor_type(8) = 4  monitor_dt(8) = 0.10
+  monitor_x_w(8)=0.0 monitor_x_e(8)=0.10 monitor_y_s(8)=0.89 monitor_y_n(8)=0.91 monitor_z_b(8)=0.0 monitor_z_t(8)=0.01
+  monitor_t_g(8)=.True.  monitor_x_g(8,2)=.True.  monitor_x_g(8,3)=.True.
+
+
+#_______________________________________________________________________
+# Notes on thermodynamics
+#   The GUI auto-loads NASA/BURCAT polynomial coefficients for species
+#   whose database names match (H2O, CO, H2, CO2, CH4, N2, C(s), SiO2,
+#   C6H6, H2O(L)). With the energy equation on, EVERY phase needs thermo.
+#   TWO pseudo-species need user-supplied data:
+#     - 'Ash'     uses the SiO2 database name (alias 'Ash') as a stand-in.
+#     - 'Biomass' (wood surrogate CH1.4O0.6, MW 23.02) is NOT in any
+#       database. You MUST provide its thermo: Cp(T) and a heat of
+#       formation consistent with the biomass HHV (so the pyrolysis heat
+#       is right). Add it in the GUI species editor or the THERMO DATA
+#       section. The pyrolysis enthalpy follows from these formation
+#       enthalpies, so getting Biomass right matters for the energy balance.
+#   For command-line (non-GUI) runs append a THERMO DATA section.

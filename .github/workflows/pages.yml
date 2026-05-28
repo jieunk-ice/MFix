@@ -1,0 +1,67 @@
+name: Deploy dashboard to GitHub Pages
+
+# Builds the static results dashboard and publishes it to GitHub Pages.
+#
+# One-time setup: in the repo, go to Settings -> Pages -> "Build and
+# deployment" -> Source: "GitHub Actions". Then this workflow publishes to
+# https://<owner>.github.io/<repo>/ on every push to the default branch (or
+# run it manually from the Actions tab).
+#
+# By default it builds from a SYNTHETIC sample dataset so the page renders
+# without a real run. To publish your own results, commit a monitor-CSV
+# directory (e.g. results/) and change RESULTS_DIR below to point at it
+# (and delete the "Generate sample results" step).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; newer runs cancel in-progress ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  RESULTS_DIR: sample_results
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pandas matplotlib
+
+      # Remove this step once RESULTS_DIR points at committed real results.
+      - name: Generate sample results (synthetic demo data)
+        run: python sample_results/make_sample.py "$RESULTS_DIR"
+
+      - name: Build dashboard
+        run: |
+          mkdir -p _site
+          python dashboard.py "$RESULTS_DIR" -o _site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

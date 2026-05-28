@@ -1,0 +1,314 @@
+#  ======================================================================
+#  3D fluidized-bed gasifier  -  biomass char steam gasification (TFM)
+#  ----------------------------------------------------------------------
+#  3D counterpart of ../gasifier_2d/gasifier_2d.mfx (square 0.1 x 0.1 m
+#  cross-section, 1 m tall). Physics, species, reactions and rate laws are
+#  IDENTICAL to the 2D case - see that deck for the detailed rationale.
+#  Its own copies of usr_rates.f / usr0.f / usr1.f live in THIS folder
+#  (one MFiX project per directory: all .f here are compiled into the
+#  custom solver). Post-process with ../postprocess.py <results_dir>.
+#
+#  ---- GRID-INDEPENDENCE STUDY -------------------------------------------
+#  Run the SAME physics at increasing resolution and compare an integral
+#  output (e.g. outlet syngas composition, carbon conversion, time-mean
+#  bed height). When the result stops changing within tolerance, the mesh
+#  is adequate. Presets below (cells = imax*jmax*kmax):
+#     coarse :  10 x  50 x 10  =   5,000   (default - fastest)
+#     medium :  15 x  75 x 15  =  16,875
+#     fine   :  20 x 100 x 20  =  40,000   (expensive with chemistry)
+#  Switch by editing the imax/jmax/kmax block below. 3D reacting runs are
+#  costly: run on multiple cores (GUI > Run > set NODESI/NODESJ/NODESK or
+#  the SMP/DMP options) and consider shorter tstop for the coarse screen.
+#  ------------------------------------------------------------------------
+
+
+#_______________________________________________________________________
+# Run control
+
+  description = 'Biomass char steam gasification - 3D TFM'
+  run_name    = 'gasifier_3d'
+  units       = 'SI'
+  run_type    = 'new'
+
+  time   = 0.0
+  tstop  = 20.0
+  dt     = 5.0000e-5
+  dt_min = 1.0000e-7
+  dt_max = 5.0000e-4
+  dt_fac = 0.9
+
+  energy_eq     = .True.
+  species_eq(0) = .True.
+  species_eq(1) = .True.
+  species_eq(2) = .False.
+
+  gravity_y = -9.81
+  drag_type = 'SYAMLAL_OBRIEN'
+  turbulence_model = 'NONE'
+  stiff_chemistry = .True.
+  call_usr = .True.          # usr1.f drives the dynamic cyclone char return
+
+
+#_______________________________________________________________________
+# Numerics
+
+  max_nit   = 50
+  tol_resid = 1.0000e-3
+  discretize(1:9) = 2 2 2 2 2 2 2 2 2
+  norm_g = 0.0
+  norm_s = 0.0
+
+
+#_______________________________________________________________________
+# Geometry  (3D)
+
+  coordinates = 'CARTESIAN'
+  x_min = 0.0   x_max = 0.10
+  y_min = 0.0   y_max = 1.00
+  z_min = 0.0   z_max = 0.10
+  no_k = .False.
+
+  # --- mesh resolution (edit for the grid study) ---
+  imax = 10
+  jmax = 50
+  kmax = 10
+  # medium:  imax=15  jmax=75  kmax=15
+  # fine:    imax=20  jmax=100 kmax=20
+
+
+#_______________________________________________________________________
+# Gas phase
+
+  mu_g0  = 3.5e-5
+  dif_g0 = 2.0e-4            # constant gas mass diffusivity [m2/s]
+  nmax_g = 8
+  species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
+  species_g(2) = 'CO'       species_alias_g(2) = 'CO'
+  species_g(3) = 'H2'       species_alias_g(3) = 'H2'
+  species_g(4) = 'CO2'      species_alias_g(4) = 'CO2'
+  species_g(5) = 'CH4'      species_alias_g(5) = 'CH4'
+  species_g(6) = 'N2'       species_alias_g(6) = 'N2'
+  species_g(7) = 'C6H6'     species_alias_g(7) = 'Tar'
+  species_g(8) = 'O2'       species_alias_g(8) = 'O2'
+
+
+#_______________________________________________________________________
+# Solids phases (char+ash variable density ; inert sand)
+
+  mmax = 2
+  solids_model(1) = 'TFM'
+  solids_model(2) = 'TFM'
+  ep_star = 0.42
+
+  d_p0(1) = 5.0e-4   close_packed(1) = .True.
+  nmax_s(1) = 4
+  species_s(1,1) = 'C(s)'    species_alias_s(1,1) = 'Char'
+  species_s(1,2) = 'SiO2'    species_alias_s(1,2) = 'Ash'   # silica thermo for ash
+  species_s(1,3) = 'Biomass' species_alias_s(1,3) = 'Biomass' # needs thermo (CH1.4O0.6)
+  species_s(1,4) = 'H2O(L)'  species_alias_s(1,4) = 'Moisture'
+  ro_xs0(1,1) = 450.0   ro_xs0(1,2) = 2000.0   ro_xs0(1,3) = 500.0   ro_xs0(1,4) = 1000.0
+  x_s0(1,1) = 0.90      x_s0(1,2) = 0.10       x_s0(1,3) = 0.0       x_s0(1,4) = 0.0
+  inert_species(1) = 2
+
+  d_p0(2) = 4.0e-4   ro_s0(2) = 2600.0   close_packed(2) = .True.
+  nmax_s(2) = 1
+  species_s(2,1) = 'SiO2'   species_alias_s(2,1) = 'Sand'
+  x_s0(2,1) = 1.0
+
+  kt_type = 'ALGEBRAIC'
+  c_e = 0.90   c_f = 0.10   phi = 30.0
+  r_p(1,2) = 0.90
+
+
+#_______________________________________________________________________
+# Initial conditions  (bed 0 - 0.30 m, sand-rich)
+
+  ic_x_w(1) = 0.0   ic_x_e(1) = 0.10
+  ic_y_s(1) = 0.0   ic_y_n(1) = 0.30
+  ic_z_b(1) = 0.0   ic_z_t(1) = 0.10
+  ic_ep_g(1)   = 0.45
+  ic_ep_s(1,1) = 0.05
+  ic_ep_s(1,2) = 0.50
+  ic_p_g(1) = 101325.0
+  ic_t_g(1) = 1123.15   ic_t_s(1,1) = 1123.15   ic_t_s(1,2) = 1123.15
+  ic_u_g(1)=0.0  ic_v_g(1)=0.0  ic_w_g(1)=0.0
+  ic_u_s(1,1)=0.0 ic_v_s(1,1)=0.0 ic_w_s(1,1)=0.0
+  ic_u_s(1,2)=0.0 ic_v_s(1,2)=0.0 ic_w_s(1,2)=0.0
+  ic_x_g(1,6) = 1.0
+  ic_x_s(1,1,1)=0.90  ic_x_s(1,1,2)=0.10  ic_x_s(1,1,3)=0.0  ic_x_s(1,1,4)=0.0
+  ic_x_s(1,2,1)=1.0
+
+  ic_x_w(2) = 0.0   ic_x_e(2) = 0.10
+  ic_y_s(2) = 0.30  ic_y_n(2) = 1.00
+  ic_z_b(2) = 0.0   ic_z_t(2) = 0.10
+  ic_ep_g(2) = 1.0
+  ic_ep_s(2,1) = 0.0  ic_ep_s(2,2) = 0.0
+  ic_p_g(2) = 101325.0
+  ic_t_g(2) = 1123.15   ic_t_s(2,1) = 1123.15   ic_t_s(2,2) = 1123.15
+  ic_u_g(2)=0.0  ic_v_g(2)=0.0  ic_w_g(2)=0.0
+  ic_x_g(2,6) = 1.0
+  ic_x_s(2,1,1)=0.90  ic_x_s(2,1,2)=0.10  ic_x_s(2,1,3)=0.0  ic_x_s(2,1,4)=0.0
+  ic_x_s(2,2,1)=1.0
+
+
+#_______________________________________________________________________
+# Boundary conditions
+#   BC1 bottom = steam inlet (whole face) ; BC2 top = pressure outflow
+#   BC3-6      = four heated side walls (allothermal heat source)
+
+  bc_type(1) = 'MI'
+  bc_x_w(1) = 0.0   bc_x_e(1) = 0.10
+  bc_y_s(1) = 0.0   bc_y_n(1) = 0.0
+  bc_z_b(1) = 0.0   bc_z_t(1) = 0.10
+  bc_ep_g(1) = 1.0
+  bc_p_g(1) = 101325.0
+  bc_t_g(1) = 1123.15
+  bc_v_g(1) = 0.40
+  bc_u_g(1) = 0.0   bc_w_g(1) = 0.0
+  bc_x_g(1,1) = 0.55   bc_x_g(1,8) = 0.25   bc_x_g(1,6) = 0.20  # steam + O2 (autothermal)
+
+  bc_type(2) = 'PO'
+  bc_x_w(2) = 0.0   bc_x_e(2) = 0.10
+  bc_y_s(2) = 1.00  bc_y_n(2) = 1.00
+  bc_z_b(2) = 0.0   bc_z_t(2) = 0.10
+  bc_p_g(2) = 101325.0
+
+  # side walls: ADIABATIC for autothermal operation (combustion supplies
+  # the heat). Uncomment the bc_tw_* lines to run allothermal/hybrid.
+  bc_type(3) = 'NSW'
+  bc_x_w(3)=0.0 bc_x_e(3)=0.0 bc_y_s(3)=0.0 bc_y_n(3)=1.0 bc_z_b(3)=0.0 bc_z_t(3)=0.10
+  # bc_tw_g(3)=1173.15  bc_tw_s(3,1)=1173.15  bc_tw_s(3,2)=1173.15
+
+  # x-max wall is SPLIT to leave a solids OVERFLOW drain (BC7) at the bed
+  # surface: lower wall (BC4) + overflow PO (BC7) + upper wall (BC8).
+  bc_type(4) = 'NSW'
+  bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=0.28 bc_z_b(4)=0.0 bc_z_t(4)=0.10
+  # bc_tw_g(4)=1173.15  bc_tw_s(4,1)=1173.15  bc_tw_s(4,2)=1173.15
+
+  bc_type(5) = 'NSW'
+  bc_x_w(5)=0.0 bc_x_e(5)=0.10 bc_y_s(5)=0.0 bc_y_n(5)=1.0 bc_z_b(5)=0.0 bc_z_t(5)=0.0
+  # bc_tw_g(5)=1173.15  bc_tw_s(5,1)=1173.15  bc_tw_s(5,2)=1173.15
+
+  bc_type(6) = 'NSW'
+  bc_x_w(6)=0.0 bc_x_e(6)=0.10 bc_y_s(6)=0.0 bc_y_n(6)=1.0 bc_z_b(6)=0.10 bc_z_t(6)=0.10
+  # bc_tw_g(6)=1173.15  bc_tw_s(6,1)=1173.15  bc_tw_s(6,2)=1173.15
+
+  # BC7: solids overflow drain (side opening at the bed surface)
+  bc_type(7) = 'PO'
+  bc_x_w(7)=0.10 bc_x_e(7)=0.10 bc_y_s(7)=0.28 bc_y_n(7)=0.32 bc_z_b(7)=0.0 bc_z_t(7)=0.10
+  bc_p_g(7) = 101325.0
+
+  # BC8: x-max wall above the overflow
+  bc_type(8) = 'NSW'
+  bc_x_w(8)=0.10 bc_x_e(8)=0.10 bc_y_s(8)=0.32 bc_y_n(8)=1.0 bc_z_b(8)=0.0 bc_z_t(8)=0.10
+  # bc_tw_g(8)=1173.15  bc_tw_s(8,1)=1173.15  bc_tw_s(8,2)=1173.15
+
+
+#_______________________________________________________________________
+# Continuous raw-biomass feed (point source) - dries & devolatilizes in situ
+
+  ps_x_w(1) = 0.0   ps_x_e(1) = 0.02
+  ps_y_s(1) = 0.05  ps_y_n(1) = 0.10
+  ps_z_b(1) = 0.04  ps_z_t(1) = 0.06
+  ps_massflow_s(1,1) = 2.0e-3
+  ps_t_s(1,1) = 350.0
+  ps_x_s(1,1,1) = 0.0    ps_x_s(1,1,2) = 0.15   ps_x_s(1,1,3) = 0.75   ps_x_s(1,1,4) = 0.10
+  ps_v_s(1,1) = 0.05
+
+  # (PS 2 intentionally unused: volatiles now come from pyrolysis.)
+
+  # PS 3: cyclone char return (hot, carbon-rich) - see gasifier_2d.mfx
+  ps_x_w(3) = 0.0   ps_x_e(3) = 0.02
+  ps_y_s(3) = 0.10  ps_y_n(3) = 0.15
+  ps_z_b(3) = 0.04  ps_z_t(3) = 0.06
+  ps_massflow_s(3,1) = 1.0e-3
+  ps_t_s(3,1) = 1123.15
+  ps_x_s(3,1,1) = 0.95   ps_x_s(3,1,2) = 0.05
+  ps_v_s(3,1) = 0.05
+
+
+#_______________________________________________________________________
+# Reactions  (identical to gasifier_2d.mfx -> shared usr_rates.f)
+
+@(RXNS)
+  Drying                  { chem_eq = 'Moisture --> H2O' }
+  Pyrolysis { chem_eq = 'Biomass --> 0.30*Char + 0.37*CO + 0.10*CO2 + 0.05*CH4 + 0.48*H2 + 0.03*H2O + 0.03*Tar' }
+  Char_Gasification       { chem_eq = 'Char + H2O --> CO + H2' }
+  Boudouard               { chem_eq = 'Char + CO2 --> 2.0*CO' }
+  Methanation             { chem_eq = 'Char + 2.0*H2 --> CH4' }
+  Water_Gas_Shift         { chem_eq = 'CO + H2O --> CO2 + H2' }
+  Rev_Water_Gas_Shift     { chem_eq = 'CO2 + H2 --> CO + H2O' }
+  Steam_Methane_Reforming { chem_eq = 'CH4 + H2O --> CO + 3.0*H2' }
+  Tar_Reforming           { chem_eq = 'Tar + 6.0*H2O --> 6.0*CO + 9.0*H2' }
+  Char_Combustion         { chem_eq = 'Char + O2 --> CO2' }
+  CO_Combustion           { chem_eq = 'CO + 0.5*O2 --> CO2' }
+  H2_Combustion           { chem_eq = 'H2 + 0.5*O2 --> H2O' }
+  CH4_Combustion          { chem_eq = 'CH4 + 2.0*O2 --> CO2 + 2.0*H2O' }
+@(END)
+
+
+#_______________________________________________________________________
+# Output
+
+  res_dt = 0.20
+
+  write_vtk_files = .True.
+  time_dependent_filename = .True.
+  vtk_x_w(1) = 0.0  vtk_x_e(1) = 0.10
+  vtk_y_s(1) = 0.0  vtk_y_n(1) = 1.00
+  vtk_z_b(1) = 0.0  vtk_z_t(1) = 0.10
+  vtk_filebase(1) = 'gasifier3d'
+  vtk_dt(1) = 0.10
+  vtk_ep_g(1)=.True.  vtk_p_g(1)=.True.  vtk_vel_g(1)=.True.  vtk_t_g(1)=.True.
+  vtk_x_g(1,2)=.True. vtk_x_g(1,3)=.True. vtk_x_g(1,4)=.True. vtk_x_g(1,5)=.True.
+  vtk_rop_s(1,1)=.True.  vtk_rop_s(1,2)=.True.  vtk_t_s(1,1)=.True.
+
+  # outlet syngas + bed char monitors (post-process with postprocess.py)
+  monitor_name(1) = 'outlet_syngas'
+  monitor_type(1) = 4
+  monitor_dt(1)   = 0.05
+  monitor_x_w(1)=0.0  monitor_x_e(1)=0.10
+  monitor_y_s(1)=1.00 monitor_y_n(1)=1.00
+  monitor_z_b(1)=0.0  monitor_z_t(1)=0.10
+  monitor_t_g(1)=.True.
+  monitor_x_g(1,1)=.True.  monitor_x_g(1,2)=.True.  monitor_x_g(1,3)=.True.
+  monitor_x_g(1,4)=.True.  monitor_x_g(1,5)=.True.  monitor_x_g(1,6)=.True.
+  monitor_x_g(1,7)=.True.
+
+  monitor_name(2) = 'bed_char'
+  monitor_type(2) = 1
+  monitor_dt(2)   = 0.05
+  monitor_x_w(2)=0.0  monitor_x_e(2)=0.10
+  monitor_y_s(2)=0.0  monitor_y_n(2)=0.40
+  monitor_z_b(2)=0.0  monitor_z_t(2)=0.10
+  monitor_rop_s(2,1)=.True.
+
+  # MON 3: outlet gas mass flow (gas yield / cold-gas efficiency)
+  monitor_name(3) = 'outlet_massflow'
+  monitor_type(3) = 7          # mass flow rate - VERIFY for your version
+  monitor_dt(3)   = 0.05
+  monitor_x_w(3)=0.0  monitor_x_e(3)=0.10
+  monitor_y_s(3)=1.00 monitor_y_n(3)=1.00
+  monitor_z_b(3)=0.0  monitor_z_t(3)=0.10
+  monitor_ro_g(3) = .True.
+
+  # MON 4-8: axial profile (thin slabs) - T_g, CO, H2 vs height
+  monitor_name(4) = 'axial_y010'  monitor_type(4) = 4  monitor_dt(4) = 0.10
+  monitor_x_w(4)=0.0 monitor_x_e(4)=0.10 monitor_y_s(4)=0.09 monitor_y_n(4)=0.11 monitor_z_b(4)=0.0 monitor_z_t(4)=0.10
+  monitor_t_g(4)=.True.  monitor_x_g(4,2)=.True.  monitor_x_g(4,3)=.True.
+
+  monitor_name(5) = 'axial_y030'  monitor_type(5) = 4  monitor_dt(5) = 0.10
+  monitor_x_w(5)=0.0 monitor_x_e(5)=0.10 monitor_y_s(5)=0.29 monitor_y_n(5)=0.31 monitor_z_b(5)=0.0 monitor_z_t(5)=0.10
+  monitor_t_g(5)=.True.  monitor_x_g(5,2)=.True.  monitor_x_g(5,3)=.True.
+
+  monitor_name(6) = 'axial_y050'  monitor_type(6) = 4  monitor_dt(6) = 0.10
+  monitor_x_w(6)=0.0 monitor_x_e(6)=0.10 monitor_y_s(6)=0.49 monitor_y_n(6)=0.51 monitor_z_b(6)=0.0 monitor_z_t(6)=0.10
+  monitor_t_g(6)=.True.  monitor_x_g(6,2)=.True.  monitor_x_g(6,3)=.True.
+
+  monitor_name(7) = 'axial_y070'  monitor_type(7) = 4  monitor_dt(7) = 0.10
+  monitor_x_w(7)=0.0 monitor_x_e(7)=0.10 monitor_y_s(7)=0.69 monitor_y_n(7)=0.71 monitor_z_b(7)=0.0 monitor_z_t(7)=0.10
+  monitor_t_g(7)=.True.  monitor_x_g(7,2)=.True.  monitor_x_g(7,3)=.True.
+
+  monitor_name(8) = 'axial_y090'  monitor_type(8) = 4  monitor_dt(8) = 0.10
+  monitor_x_w(8)=0.0 monitor_x_e(8)=0.10 monitor_y_s(8)=0.89 monitor_y_n(8)=0.91 monitor_z_b(8)=0.0 monitor_z_t(8)=0.10
+  monitor_t_g(8)=.True.  monitor_x_g(8,2)=.True.  monitor_x_g(8,3)=.True.
