@@ -22,6 +22,7 @@
 #  Companion files in this folder:
 #    usr_rates.f      reaction rate laws (literature-based forms; the
 #                     pre-exponentials still need calibration to your char)
+#    usr1.f           dynamic cyclone char-return coupling (needs CALL_USR)
 #    coldflow_2d.mfx  hydrodynamics-only case for Umf / bed-expansion checks
 #    gasifier_3d.mfx  3D version + grid-independence instructions
 #    postprocess.py   syngas composition + carbon conversion from monitors
@@ -59,6 +60,9 @@
 
   # Reactions: stiff ODE integrator is robust for gasification kinetics
   stiff_chemistry = .True.
+
+  # Call user routines (usr1.f drives the dynamic cyclone char return)
+  call_usr = .True.
 
 
 #_______________________________________________________________________
@@ -297,14 +301,14 @@
   # return leg: it re-injects char low in the bed at the HOT bed
   # temperature (the loop is internal/refractory-lined, not cooled), and
   # mostly char (the cyclone separates fines, leaving little ash behind).
-  #   As shipped this is a STATIC return rate. To close the loop
-  #   dynamically (return = collection_efficiency x elutriated char flux),
-  #   measure the char outflow at BC2 in a usr1.f routine and set
-  #   ps_massflow_s(3,1) each step - see chat notes.
+  #   The value below is just the initial/fallback rate: usr1.f OVERWRITES
+  #   ps_massflow_s(3,1) every timestep with ETA x (char elutriated at the
+  #   top outlet), closing the loop dynamically (CALL_USR = .True. above).
+  #   Set ETA / disable in usr1.f, or set CALL_USR=.False. to keep it static.
   ps_x_w(3) = 0.0   ps_x_e(3) = 0.02
   ps_y_s(3) = 0.10  ps_y_n(3) = 0.15
   ps_z_b(3) = 0.0   ps_z_t(3) = 0.01
-  ps_massflow_s(3,1) = 1.0e-4      # returned char rate [kg/s] (tune to cyclone)
+  ps_massflow_s(3,1) = 1.0e-4      # initial/fallback rate [kg/s] (usr1.f updates)
   ps_t_s(3,1)  = 1123.15           # hot (internally recirculated)
   ps_x_s(3,1,1) = 0.95             # Char (fines are carbon-rich)
   ps_x_s(3,1,2) = 0.05             # Ash

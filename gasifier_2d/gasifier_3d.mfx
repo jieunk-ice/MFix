@@ -45,6 +45,7 @@
   drag_type = 'SYAMLAL_OBRIEN'
   turbulence_model = 'NONE'
   stiff_chemistry = .True.
+  call_usr = .True.          # usr1.f drives the dynamic cyclone char return
 
 
 #_______________________________________________________________________
