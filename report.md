@@ -111,7 +111,7 @@ selects which one-way reaction carries the rate. Char reactivities use the
 |------|---------|
 | `usr_rates.f` | the seven reaction rates (LH + mass-action, reversible WGS) |
 | `usr0.f` | one-time: create `recirc.csv` log (I/O rank) |
-| `usr1.f` | per step: char elutriation flux → set return point-source rate; log it |
+| `usr1.f` | per step: integrate char flux out the top (elutriation) and the overflow → set return rate (η·elutriation); log both for the carbon balance |
 
 All require `call_usr = .True.` (set in the reacting decks). Setting
 `call_usr = .False.` cleanly disables `usr0/usr1` (the static return rate then
@@ -139,9 +139,16 @@ Recommended **staged bring-up** (don't start from the full reacting case):
 CSVs and reports:
 
 - dry, tar-free **syngas composition** (mole %) and **H₂/CO ratio** at the outlet;
-- **carbon conversion** from the bed char-inventory monitor;
-- the **cyclone recirculation loop** (mean elutriation, mean return, return
-  ratio) from `recirc.csv`.
+- **carbon conversion** — both an inventory-basis estimate (batch only) and a
+  **steady-state carbon balance** `X_C = 1 − (overflow + (1−η)·elutriation) /
+  (fresh char carbon fed)`, using the char fluxes logged by `usr1.f`;
+- the **cyclone recirculation loop** (mean elutriation, return, overflow,
+  return ratio) from `recirc.csv`.
+
+`usr1.f` logs four columns to `recirc.csv` — time, top elutriation, cyclone
+return, and side-overflow char flux — so the balance closes from the run plus
+the feed constants (`CHAR_FEED_KG_S`, `CHAR_FRACTION`, `CYCLONE_ETA` in
+`postprocess.py`, which must match the deck).
 
 ## 9. Assumptions and limitations
 
@@ -167,10 +174,12 @@ CSVs and reports:
 
 - Replace placeholder kinetics with measured/literature values for the target
   char; add intrinsic-vs-effective (diffusion-limited) reactivity if relevant.
-- Add a true carbon-balance conversion (carbon in feed vs carbon out) once feed
-  and overflow rates are set.
-- Calibrate the steam/carbon ratio and bed temperature to a target syngas H₂/CO.
+- Calibrate the steam/carbon ratio and bed temperature to a target syngas H₂/CO
+  (a parameter sweep over `bc_v_g` / steam fraction / wall temperature).
 - Validate hydrodynamics (Uₘf, bed expansion) and, if available, syngas data.
+
+A steady-state carbon balance (carbon in feed vs. solid carbon out) is now
+computed by `postprocess.py` from the char fluxes logged by `usr1.f`.
 
 ## 11. References
 

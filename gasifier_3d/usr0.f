@@ -19,7 +19,8 @@
       IF (myPE /= PE_IO) RETURN
 
       OPEN(newunit=lun, file='recirc.csv', status='replace', action='write')
-      WRITE(lun,'(A)') 'Time,elutriation_char_kg_s,return_char_kg_s'
+      WRITE(lun,'(A)')                                                   &
+         'Time,elutriation_char_kg_s,return_char_kg_s,overflow_char_kg_s'
       CLOSE(lun)
 
       RETURN

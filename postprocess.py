@@ -49,6 +49,13 @@ SYNGAS = ["CO", "H2", "CO2", "CH4"]
 # If autodetection picks the wrong column, hardcode here: {"CO": "X_g_2", ...}
 COLUMN_OVERRIDES: dict[str, str] = {}
 
+# Feed / cyclone parameters for the carbon balance. MUST match the .mfx PS
+# settings and the usr1.f ETA. Char species is C(s), i.e. pure carbon, so the
+# fed carbon rate is CHAR_FEED_KG_S * CHAR_FRACTION.
+CHAR_FEED_KG_S = 2.0e-4   # ps_massflow_s(1,1): fresh char feed
+CHAR_FRACTION = 0.90      # char (carbon) mass fraction of that feed
+CYCLONE_ETA = 0.90        # cyclone collection efficiency (usr1.f ETA)
+
 
 def find_csv(results_dir: str, stem: str) -> str | None:
     """Locate a monitor CSV by name stem, case-insensitively."""
@@ -176,18 +183,24 @@ def report_recirc(results_dir: str, tail: float, do_plot: bool) -> None:
         print("  (unexpected columns; expected elutriation + return)")
         return
     elut_col, ret_col = cols[0], cols[1]
+    ovfl_col = cols[2] if len(cols) > 2 else None
     avg = tail_average(df, tcol, tail)
     elut, ret = avg[elut_col], avg[ret_col]
     print(f"  mean char elutriation (last {tail:.0%}): {elut:.4g} kg/s")
     print(f"  mean char return      (last {tail:.0%}): {ret:.4g} kg/s")
     if elut > 0:
         print(f"  effective return ratio: {ret / elut:.2f}  (~cyclone efficiency)")
+    if ovfl_col is not None:
+        print(f"  mean char overflow    (last {tail:.0%}): {avg[ovfl_col]:.4g} kg/s")
+        _carbon_balance(elut, avg[ovfl_col], tail)
     if do_plot:
         import matplotlib.pyplot as plt
 
         plt.figure()
         plt.plot(df[tcol], df[elut_col], label="elutriation")
         plt.plot(df[tcol], df[ret_col], label="return")
+        if ovfl_col is not None:
+            plt.plot(df[tcol], df[ovfl_col], label="overflow")
         plt.xlabel("time [s]")
         plt.ylabel("char mass flow [kg/s]")
         plt.legend()
@@ -195,6 +208,25 @@ def report_recirc(results_dir: str, tail: float, do_plot: bool) -> None:
         out = "recirc_loop.png"
         plt.savefig(out, dpi=120, bbox_inches="tight")
         print(f"  saved plot: {out}")
+
+
+def _carbon_balance(elut: float, ovfl: float, tail: float) -> None:
+    """Steady-state solid-carbon conversion from the logged char fluxes.
+
+    Solid carbon leaves the system as overflow plus the uncaptured fraction
+    of elutriated char ((1-eta) escapes the cyclone). Char is pure carbon,
+    so these mass flows are carbon flows.
+        X_C = 1 - (overflow + (1-eta)*elutriation) / (fresh char carbon fed)
+    """
+    carbon_fed = CHAR_FEED_KG_S * CHAR_FRACTION
+    carbon_out = ovfl + (1.0 - CYCLONE_ETA) * elut
+    print(f"\n  steady-state carbon balance (last {tail:.0%}):")
+    print(f"    fresh char carbon fed   : {carbon_fed:.4g} kg/s")
+    print(f"    solid carbon leaving    : {carbon_out:.4g} kg/s")
+    if carbon_fed > 0:
+        x = 1.0 - carbon_out / carbon_fed
+        print(f"    char carbon conversion  : {100.0 * x:6.2f} %")
+    print("    (set CHAR_FEED_KG_S / CHAR_FRACTION / CYCLONE_ETA to match the deck)")
 
 
 def _plot_syngas(df, tcol, found):
