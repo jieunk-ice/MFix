@@ -7,9 +7,10 @@
 #  in the GUI hit "Build" (it compiles usr_rates.f), then "Run".
 #
 #  Physics enabled here:
-#    - gas + 1 TFM solids phase (char + ash), variable solids density
+#    - gas + 2 TFM solids phases: char+ash (reacting, variable density)
+#      and inert silica sand (heat carrier, drives fluidization)
 #    - energy equation ON (gasification is strongly endothermic)
-#    - 6 gas species, 2 solid species, 3 heterogeneous/homogeneous rxns
+#    - 6 gas species, 3 solid species, 3 heterogeneous/homogeneous rxns
 #
 #  This is an ALLOTHERMAL setup: heat must be supplied to sustain the
 #  endothermic char-steam reaction. As shipped, the bed/steam start hot
@@ -39,7 +40,8 @@
 
   energy_eq     = .True.
   species_eq(0) = .True.   # gas phase species transport
-  species_eq(1) = .True.   # solids phase species transport
+  species_eq(1) = .True.   # solids 1 (char+ash): composition changes -> on
+  species_eq(2) = .False.  # solids 2 (sand): inert single component -> off
 
   gravity_y = -9.81
 
@@ -94,16 +96,20 @@
 
 
 #_______________________________________________________________________
-# Solids phase 1  (char + ash, variable density via inert species)
+# Solids phases (TFM, polydisperse: reacting char + inert sand)
+#   Phase 1 = char + ash   (light, low density, consumed by reactions)
+#   Phase 2 = sand (SiO2)  (heavy bed material: carries heat, drives
+#                           fluidization, makes up most of the inventory)
 
-  mmax = 1
+  mmax = 2
   solids_model(1) = 'TFM'
+  solids_model(2) = 'TFM'
 
-  d_p0(1)       = 5.0e-4     # 500 micron char particles [m]
+  ep_star = 0.42             # void at maximum packing (whole solids mixture)
+
+  # --- Phase 1: char + ash (variable density via inert species) ---
+  d_p0(1)         = 5.0e-4   # 500 micron char particles [m]
   close_packed(1) = .True.
-  ep_star       = 0.42       # void at maximum packing
-
-  # Variable solids density: leave ro_s0 unset, give per-species densities
   nmax_s(1) = 2
   species_s(1,1) = 'C(s)'   species_alias_s(1,1) = 'Char'
   species_s(1,2) = 'Ash'    species_alias_s(1,2) = 'Ash'
@@ -113,45 +119,66 @@
   x_s0(1,2)   = 0.10         # baseline ash mass fraction
   inert_species(1) = 2       # ash is inert (used by density model)
 
+  # --- Phase 2: sand / silica (inert, constant density) ---
+  d_p0(2)         = 4.0e-4   # 400 micron sand grains [m]
+  ro_s0(2)        = 2600.0   # silica sand density [kg/m3] (constant)
+  close_packed(2) = .True.
+  nmax_s(2) = 1
+  species_s(2,1) = 'SiO2'   species_alias_s(2,1) = 'Sand'
+  x_s0(2,1)   = 1.0          # pure silica
+
   # Granular flow (kinetic theory, algebraic for robustness)
   kt_type = 'ALGEBRAIC'
   c_e = 0.90                 # particle-particle restitution
+  c_f = 0.10                 # particle-particle friction coefficient
   phi = 30.0                 # angle of internal friction [deg]
+  r_p(1,2) = 0.90            # char-sand restitution coefficient
 
 
 #_______________________________________________________________________
 # Initial conditions
-#   IC 1: dense bed,  0.00 - 0.30 m  (char bed, hot, inert N2 gas)
+#   IC 1: dense bed,  0.00 - 0.30 m  (sand-rich, small char load, hot, N2)
 #   IC 2: freeboard,  0.30 - 1.00 m  (gas only, hot)
+#   Volume fractions must satisfy  ep_g + ep_s(1) + ep_s(2) = 1.
 
   # --- IC 1: bed ---
   ic_x_w(1) = 0.0   ic_x_e(1) = 0.10
   ic_y_s(1) = 0.0   ic_y_n(1) = 0.30
   ic_z_b(1) = 0.0   ic_z_t(1) = 0.01
 
-  ic_ep_g(1) = 0.50          # ~50% solids packed bed
+  ic_ep_g(1)   = 0.45        # 45% voidage (settled bed)
+  ic_ep_s(1,1) = 0.05        # char: small fraction of the inventory
+  ic_ep_s(1,2) = 0.50        # sand: the bulk of the bed
   ic_p_g(1)  = 101325.0
   ic_t_g(1)  = 1123.15       # 850 C
   ic_t_s(1,1)= 1123.15
+  ic_t_s(1,2)= 1123.15
 
   ic_u_g(1) = 0.0   ic_v_g(1) = 0.0   ic_w_g(1) = 0.0
   ic_u_s(1,1) = 0.0 ic_v_s(1,1) = 0.0 ic_w_s(1,1) = 0.0
+  ic_u_s(1,2) = 0.0 ic_v_s(1,2) = 0.0 ic_w_s(1,2) = 0.0
 
   ic_x_g(1,6) = 1.0          # start gas as pure N2
   ic_x_s(1,1,1) = 0.90       # Char
   ic_x_s(1,1,2) = 0.10       # Ash
+  ic_x_s(1,2,1) = 1.0        # Sand (pure SiO2)
 
   # --- IC 2: freeboard ---
   ic_x_w(2) = 0.0   ic_x_e(2) = 0.10
   ic_y_s(2) = 0.30  ic_y_n(2) = 1.00
   ic_z_b(2) = 0.0   ic_z_t(2) = 0.01
 
-  ic_ep_g(2) = 1.0
+  ic_ep_g(2)   = 1.0
+  ic_ep_s(2,1) = 0.0
+  ic_ep_s(2,2) = 0.0
   ic_p_g(2)  = 101325.0
   ic_t_g(2)  = 1123.15
   ic_t_s(2,1)= 1123.15
+  ic_t_s(2,2)= 1123.15
   ic_u_g(2) = 0.0   ic_v_g(2) = 0.0
   ic_x_g(2,6) = 1.0          # N2
+  ic_x_s(2,1,1) = 0.90  ic_x_s(2,1,2) = 0.10
+  ic_x_s(2,2,1) = 1.0
 
 
 #_______________________________________________________________________
@@ -168,7 +195,10 @@
   bc_ep_g(1) = 1.0
   bc_p_g(1)  = 101325.0
   bc_t_g(1)  = 1123.15
-  bc_v_g(1)  = 0.30          # superficial steam velocity [m/s] (> Umf)
+  bc_v_g(1)  = 0.40          # superficial steam velocity [m/s]
+                             # sand-rich bed is heavier than char alone -
+                             # check against Umf of the binary mixture and
+                             # raise if the bed does not fluidize.
   bc_u_g(1)  = 0.0
   bc_x_g(1,1) = 0.70         # H2O (steam)
   bc_x_g(1,6) = 0.30         # N2 carrier / tracer
@@ -190,12 +220,14 @@
   # bc_z_b(3)=0.0  bc_z_t(3)=0.01
   # bc_tw_g(3)   = 1173.15
   # bc_tw_s(3,1) = 1173.15
+  # bc_tw_s(3,2) = 1173.15
   #
   # bc_type(4) = 'NSW'
   # bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=1.0
   # bc_z_b(4)=0.0  bc_z_t(4)=0.01
   # bc_tw_g(4)   = 1173.15
   # bc_tw_s(4,1) = 1173.15
+  # bc_tw_s(4,2) = 1173.15
   # ---------------------------------------------------------------------
 
 
@@ -245,14 +277,20 @@
   vtk_x_g(1,4)  = .True.     # CO2
   vtk_vel_s(1,1)= .True.
   vtk_t_s(1,1)  = .True.
-  vtk_rop_s(1,1)= .True.     # solids bulk density (bed shape)
-  vtk_x_s(1,1,1)= .True.     # Char
+  vtk_rop_s(1,1)= .True.     # char bulk density (where the char is)
+  vtk_x_s(1,1,1)= .True.     # Char mass fraction
+  vtk_vel_s(1,2)= .True.
+  vtk_t_s(1,2)  = .True.
+  vtk_rop_s(1,2)= .True.     # sand bulk density (bed shape / segregation)
 
 
 #_______________________________________________________________________
 # Notes on thermodynamics
 #   The GUI auto-loads NASA/BURCAT polynomial coefficients for species
-#   whose names match the database (H2O, CO, H2, CO2, CH4, N2, C(s)).
-#   'Ash' is NOT a standard database entry: in the GUI, either define its
-#   thermo data manually or substitute an inert like 'SIO2' (silica).
-#   For command-line (non-GUI) runs you must append a THERMO DATA section.
+#   whose names match the database (H2O, CO, H2, CO2, CH4, N2, C(s), SiO2).
+#   With the energy equation on, EVERY phase needs thermo data so its
+#   specific heat / enthalpy can be evaluated - including the inert sand
+#   (SiO2 is in the database) and 'Ash'. 'Ash' is NOT a standard entry:
+#   in the GUI, either define its thermo data manually or substitute an
+#   inert like SiO2. For command-line (non-GUI) runs you must append a
+#   THERMO DATA section.
