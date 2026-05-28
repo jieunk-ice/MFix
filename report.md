@@ -209,6 +209,14 @@ efficiency) with the KPIs and charts updating live. It reuses the same parsers
 and `dashboard.py`'s metric logic, so the numbers match the static export and
 the CLI; Streamlit is the only extra dependency.
 
+The static dashboard can also be published on **GitHub Pages**: the workflow
+`.github/workflows/pages.yml` builds `dashboard.py` and deploys the HTML on
+each push to the default branch (enable Settings → Pages → Source: GitHub
+Actions). It builds from a synthetic sample dataset
+(`sample_results/make_sample.py`) by default; point `RESULTS_DIR` at a
+committed real monitor-CSV directory to publish actual results. Streamlit
+cannot run on Pages (static hosting only).
+
 ## 9. Assumptions and limitations
 
 - **Unvalidated.** Not compiled/run here. Build in the GUI and watch the first

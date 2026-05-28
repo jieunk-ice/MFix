@@ -38,5 +38,23 @@ pip install streamlit          # optional extra dependency
 streamlit run dashboard_app.py
 ```
 
+### Publishing the dashboard on GitHub Pages
+
+The static `dashboard.py` HTML is hosted-ready. A workflow
+(`.github/workflows/pages.yml`) builds it and deploys to GitHub Pages.
+
+1. In the repo: **Settings → Pages → Build and deployment → Source: GitHub
+   Actions**.
+2. Push to the default branch (or run the workflow manually from the Actions
+   tab). The dashboard publishes to `https://<owner>.github.io/<repo>/` —
+   for this repo, `https://jieunk-ice.github.io/MFix/`.
+
+By default it builds from a **synthetic** sample dataset
+(`sample_results/make_sample.py`) so the page renders without a real run. To
+publish your own results, commit a monitor-CSV directory (e.g. `results/`),
+set `RESULTS_DIR` in the workflow to it, and delete the sample-generation
+step. (The Streamlit app can't run on Pages — Pages is static hosting only;
+use it locally.)
+
 One MFiX project per directory (all `.f` in a directory compile into that
 project's custom solver).
