@@ -70,10 +70,12 @@ report.md      this document
 
 ### 4.3 Reactions and kinetics
 
-Seven reactions; rate laws are in `usr_rates.f`. The **rate forms and
-activation energies are literature-based**; the **pre-exponentials and LH
-inhibition constants are order-of-magnitude defaults to be calibrated** to a
-specific char.
+Seven reactions; rate laws are in `usr_rates.f`. The **rate forms,
+activation energies, and pre-exponentials are literature values** (sources
+cited per line, table below). They are **interim stand-ins to be replaced with
+experimental kinetics** fitted to the target char/tar — see the RECALL banner
+in `usr_rates.f`. Activation energies are the better-established part;
+pre-exponentials vary by orders of magnitude between chars.
 
 | # | Reaction | ΔH | Rate form | Source |
 |---|----------|----|-----------|--------|
@@ -154,8 +156,9 @@ the feed constants (`CHAR_FEED_KG_S`, `CHAR_FRACTION`, `CYCLONE_ETA` in
 
 - **Unvalidated.** Not compiled/run here. Build in the GUI and watch the first
   run.
-- **Kinetics.** Pre-exponentials and LH inhibition constants are placeholders;
-  calibrate to your char/tar and the cited sources.
+- **Kinetics.** Literature values are in place (cited in `usr_rates.f`) as an
+  interim stand-in; **recall to replace with experimental kinetics** fitted to
+  your char/tar. The LH inhibition constants in particular are approximate.
 - **Rate units.** `usr_rates.f` assumes SI molar-rate units (kmol·m⁻³·s⁻¹);
   confirm against the bundled `silane_pyrolysis` tutorial and rescale if needed.
 - **Monitor types.** `monitor_type` integers (area average vs sum vs flow-rate)
@@ -172,8 +175,9 @@ the feed constants (`CHAR_FEED_KG_S`, `CHAR_FRACTION`, `CYCLONE_ETA` in
 
 ## 10. Recommended next steps
 
-- Replace placeholder kinetics with measured/literature values for the target
-  char; add intrinsic-vs-effective (diffusion-limited) reactivity if relevant.
+- **Replace the interim literature kinetics** (now in `usr_rates.f`) with
+  values fitted to the target char/tar (TGA / lab gasification data); add
+  intrinsic-vs-effective (diffusion-limited) reactivity if relevant.
 - Calibrate the steam/carbon ratio and bed temperature to a target syngas H₂/CO
   (a parameter sweep over `bc_v_g` / steam fraction / wall temperature).
 - Validate hydrodynamics (Uₘf, bed expansion) and, if available, syngas data.

@@ -20,7 +20,8 @@
 #    - outlet/bed monitors -> CSV for postprocess.py
 #
 #  Repo layout (one MFiX project per directory):
-#    gasifier_2d/   THIS case + usr_rates.f (literature rate laws),
+#    gasifier_2d/   THIS case + usr_rates.f (literature kinetics in place;
+#                   RECALL: replace with experimental values later),
 #                   usr0.f / usr1.f (dynamic cyclone char return + log)
 #    gasifier_3d/   3D version + grid-independence study (own usr_*.f)
 #    coldflow_2d/   hydrodynamics-only case for Umf / bed-expansion checks

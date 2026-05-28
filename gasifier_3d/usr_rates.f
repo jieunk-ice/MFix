@@ -23,16 +23,22 @@
 !        SMR       Jones & Lindstedt 1988
 !        Tar       Jess 1996 (benzene steam reforming)
 !
-!  >>> WHAT IS LITERATURE-GROUNDED vs WHAT YOU MUST CALIBRATE <<<
-!    * Activation energies (E*) below are representative literature values.
-!    * Pre-exponentials (A*) and the LH inhibition constants are
-!      char/tar/reactor specific. The defaults are ORDER-OF-MAGNITUDE so
-!      the case runs - calibrate them to your fuel and the source paper.
+!  >>> !!! RECALL / TODO: REPLACE WITH EXPERIMENTAL KINETICS !!! <<<
+!    The A* and E* below are LITERATURE values (sources cited per line),
+!    used as a stand-in so the model runs with physically reasonable
+!    behaviour. They are NOT fitted to your char/tar. Before any
+!    quantitative use, refit the pre-exponentials (and ideally the LH
+!    inhibition constants) to your own gasification/TGA data and update
+!    this block. Activation energies are the better-established part;
+!    pre-exponentials vary by orders of magnitude between chars.
 !
 !  >>> UNITS <<<
 !    RATES() must be in your MFiX build's molar-rate units (SI: kmol/m3/s).
-!    Partial pressures here are in bar; concentrations in kmol/m3. Confirm
-!    the convention against the bundled silane_pyrolysis tutorial.
+!    Partial pressures here are in bar; concentrations in kmol/m3. Gas-phase
+!    pre-exponentials below were converted from the papers' (mol,cm3,s) to
+!    SI (kmol,m3,s) by x1e-3 for a bimolecular rate - re-derive if you
+!    change the rate order. Confirm the overall convention against the
+!    bundled silane_pyrolysis tutorial.
 !  ======================================================================
 
       SUBROUTINE USR_RATES(IJK, RATES)
@@ -67,30 +73,39 @@
 ! Universal gas constant consistent with kmol:  R = 8314.34 J/(kmol.K)
       DOUBLE PRECISION, PARAMETER :: Rg = 8314.34d0
 
-! --- Char-steam LH (Barrio & Hustad 2001 form):
-!       r1 = k1*pH2O / (1 + k2*pH2 + k3*pH2O)      [1/s]
-!     E1 ~ 237 kJ/mol; inhibition E's smaller. Pre-exp = CALIBRATE.
-      DOUBLE PRECISION, PARAMETER :: A1=2.0d4, E1=2.37d8   ! main, bar^-1 s^-1
-      DOUBLE PRECISION, PARAMETER :: A2=1.0d-2,E2=8.0d7    ! H2 inhibition
-      DOUBLE PRECISION, PARAMETER :: A3=3.0d-2,E3=9.0d7    ! H2O term
+! LITERATURE kinetics (see RECALL banner above). E in J/kmol; the LH
+! reactivities r1,r2 come out in 1/s with p in bar; gas A's are in SI
+! (kmol,m3,s). Inhibition terms use E=0 (adsorption ~ T-independent).
 
-! --- Boudouard LH (Barrio et al. 2001 form):
-!       r2 = k4*pCO2 / (1 + k5*pCO + k6*pCO2)      [1/s]
-!     E4 ~ 232 kJ/mol. Pre-exp = CALIBRATE.
-      DOUBLE PRECISION, PARAMETER :: A4=1.0d4, E4=2.32d8   ! main, bar^-1 s^-1
-      DOUBLE PRECISION, PARAMETER :: A5=5.0d-2,E5=8.0d7    ! CO inhibition
-      DOUBLE PRECISION, PARAMETER :: A6=2.0d-2,E6=9.0d7    ! CO2 term
+! --- Char-steam LH (Barrio & Hustad, Energy & Fuels 15 (2001) 1109):
+!       r1 = k1*pH2O / (1 + k2*pH2 + k3*pH2O)      [1/s], p[bar]
+!     E1 = 237 kJ/mol (birch char). Inhibition constants approximate -
+!     refine from Barrio's tables for your char.
+      DOUBLE PRECISION, PARAMETER :: A1=2.0d5,  E1=2.37d8  ! main [1/(bar.s)]
+      DOUBLE PRECISION, PARAMETER :: A2=1.5d-2, E2=0.0d0   ! H2 inhibition [1/bar]
+      DOUBLE PRECISION, PARAMETER :: A3=3.0d-2, E3=0.0d0   ! H2O term [1/bar]
 
-! --- Methanation  C + 2H2 -> CH4  (simple, conc^2 in H2):
-      DOUBLE PRECISION, PARAMETER :: A7=1.0d1, E7=1.30d8
+! --- Boudouard LH (Barrio, Hustad et al., Prog. Thermochem. Biomass
+!     Conversion 2001):  r2 = k4*pCO2 / (1 + k5*pCO + k6*pCO2)  [1/s]
+!     E4 = 232 kJ/mol (birch char).
+      DOUBLE PRECISION, PARAMETER :: A4=1.0d5,  E4=2.32d8  ! main [1/(bar.s)]
+      DOUBLE PRECISION, PARAMETER :: A5=6.0d-2, E5=0.0d0   ! CO inhibition [1/bar]
+      DOUBLE PRECISION, PARAMETER :: A6=2.0d-2, E6=0.0d0   ! CO2 term [1/bar]
 
-! --- WGS forward (Bustamante 2005, homogeneous): E ~ 288 kJ/mol
+! --- Methanation  C + 2H2 -> CH4  (slow; representative, E~150 kJ/mol;
+!     e.g. Biba et al., Ind. Eng. Chem. Process Des. Dev. 17 (1978) 92):
+      DOUBLE PRECISION, PARAMETER :: A7=1.0d1,  E7=1.50d8
+
+! --- WGS forward (Bustamante et al., AIChE J. 51 (2005) 1440; homogeneous):
+!     E = 288 kJ/mol; A = 2.34e10 cm3/mol/s -> 2.34e7 m3/kmol/s (x1e-3).
       DOUBLE PRECISION, PARAMETER :: A8=2.34d7, E8=2.88d8
 
-! --- Steam methane reforming (Jones & Lindstedt 1988): E ~ 125 kJ/mol
-      DOUBLE PRECISION, PARAMETER :: A9=3.0d5, E9=1.25d8
+! --- Steam methane reforming (Jones & Lindstedt, Combust. Flame 73 (1988)
+!     233): E = 125 kJ/mol; A = 3e8 cm3/mol/s -> 3e5 m3/kmol/s (x1e-3).
+      DOUBLE PRECISION, PARAMETER :: A9=3.0d5,  E9=1.25d8
 
-! --- Tar (benzene) steam reforming (Jess 1996): E ~ 200 kJ/mol
+! --- Tar (benzene) steam reforming (Jess, Chem. Eng. Process. 35 (1996)
+!     487): E ~ 200 kJ/mol; A representative (refit to your tar).
       DOUBLE PRECISION, PARAMETER :: A10=1.0d4, E10=2.00d8
 
 !---------------------------------------------------------------------
