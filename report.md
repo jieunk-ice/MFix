@@ -24,7 +24,7 @@ Three Eulerian phases:
 
 | Phase | Material | Role | Density model |
 |------:|----------|------|---------------|
-| Gas (0) | H₂O, CO, H₂, CO₂, CH₄, N₂, C₆H₆(tar) | reactant/product | ideal-gas mixture |
+| Gas (0) | H₂O, CO, H₂, CO₂, CH₄, N₂, C₆H₆(tar), O₂ | reactant/product | ideal-gas mixture |
 | Solids 1 | biomass, moisture, char, ash | reacting fuel | variable (inert ash) |
 | Solids 2 | silica sand | heat carrier, fluidization | constant (2600 kg/m³) |
 
@@ -61,8 +61,8 @@ report.md      this document
 |---|---|
 | Pressure | 101.3 kPa (atmospheric) |
 | Bed/inlet temperature | 1123 K (850 °C) |
-| Wall temperature (allothermal) | 1173 K |
-| Steam inlet (superficial) | 0.40 m/s, 70 % H₂O / 30 % N₂ (mass) |
+| Walls | adiabatic (autothermal); 1173 K fixed-T option for allothermal |
+| Inlet (superficial) | 0.40 m/s; 55 % H₂O / 25 % O₂ / 20 % N₂ (mass) |
 | Char particle | 500 µm, 450 kg/m³ |
 | Sand particle | 400 µm, 2600 kg/m³ |
 | Initial voidage (bed) | 0.45 (char 0.05, sand 0.50) |
@@ -89,7 +89,12 @@ pre-exponentials vary by orders of magnitude between chars.
 | 7 | CO₂ + H₂ → CO + H₂O | endo | reverse via Keq(T) | Moe 1962 |
 | 8 | CH₄ + H₂O → CO + 3 H₂ | endo | mass-action | Jones & Lindstedt 1988 |
 | 9 | C₆H₆ + 6 H₂O → 6 CO + 9 H₂ | endo | mass-action | Jess 1996 |
+| 10 | C + O₂ → CO₂ | exo | mass-action | Smith 1982 |
+| 11 | CO + ½ O₂ → CO₂ | exo | mass-action | Westbrook & Dryer 1981 |
+| 12 | H₂ + ½ O₂ → H₂O | exo | mass-action | (representative) |
+| 13 | CH₄ + 2 O₂ → CO₂ + 2 H₂O | exo | mass-action | Westbrook & Dryer 1981 |
 
+Reactions 10–13 are the **autothermal** heat source (partial oxidation).
 Pyrolysis is mass/atom-balanced for a wood surrogate **Biomass = CH₁.₄O₀.₆**
 (MW 23.02): `Biomass → 0.30 C + 0.37 CO + 0.10 CO₂ + 0.05 CH₄ + 0.48 H₂ +
 0.03 H₂O + 0.03 C₆H₆`.
@@ -101,8 +106,11 @@ selects which one-way reaction carries the rate. Char reactivities use the
 
 ## 5. Operational features
 
-- **Allothermal heat source.** Constant-temperature side walls (1173 K) supply
-  the heat for the net-endothermic chemistry (`bc_tw_g`, `bc_tw_s`, Dirichlet).
+- **Autothermal heat source.** A steam + O₂ inlet drives partial-oxidation
+  (combustion) reactions whose heat sustains the endothermic gasification, so
+  the side walls are run **adiabatic**. The O₂ fraction sets the equivalence
+  ratio / bed temperature; the fixed-temperature wall block (`bc_tw_*`) is left
+  commented for reverting to allothermal/hybrid operation.
 - **Continuous biomass feed (point source).** PS1 injects raw wet biomass
   (350 K; 75 % dry biomass / 10 % moisture / 15 % ash by mass). Drying and
   pyrolysis (reactions 1–2) then release the moisture and volatiles in situ —

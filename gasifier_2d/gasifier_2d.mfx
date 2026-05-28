@@ -10,11 +10,12 @@
 #    - gas + 2 TFM solids phases: biomass/char fuel (reacting, variable
 #      density) and inert silica sand (heat carrier, drives fluidization)
 #    - energy equation ON (gasification is strongly endothermic)
-#    - 7 gas species, 4 solid species (char, ash, biomass, moisture),
-#      9 reactions: drying + pyrolysis (devolatilization), char
-#      gasification, Boudouard, methanation, water-gas-shift fwd/rev,
-#      steam-methane reforming, tar reforming
-#    - ALLOTHERMAL: constant-temperature heated side walls supply heat
+#    - 8 gas species (incl. O2), 4 solid species (char, ash, biomass,
+#      moisture), 13 reactions: drying + pyrolysis (devolatilization),
+#      char gasification, Boudouard, methanation, water-gas-shift fwd/rev,
+#      steam-methane reforming, tar reforming, and char/CO/H2/CH4 combustion
+#    - AUTOTHERMAL: steam + O2 inlet; partial oxidation supplies the heat,
+#      so the side walls are ADIABATIC (uncomment bc_tw_* for allothermal)
 #    - continuous RAW BIOMASS feed (dries & devolatilizes in situ)
 #    - solids OVERFLOW drain (side opening) bounds the bed inventory
 #    - cyclone CHAR RETURN point source closes the recirculation loop
@@ -102,7 +103,7 @@
   mu_g0  = 3.5e-5        # constant gas viscosity [Pa.s] (simplification)
   dif_g0 = 2.0e-4        # constant gas mass diffusivity [m2/s] (~high-T value)
 
-  nmax_g = 7
+  nmax_g = 8
   species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
   species_g(2) = 'CO'       species_alias_g(2) = 'CO'
   species_g(3) = 'H2'       species_alias_g(3) = 'H2'
@@ -110,6 +111,7 @@
   species_g(5) = 'CH4'      species_alias_g(5) = 'CH4'
   species_g(6) = 'N2'       species_alias_g(6) = 'N2'
   species_g(7) = 'C6H6'     species_alias_g(7) = 'Tar'   # benzene tar surrogate
+  species_g(8) = 'O2'       species_alias_g(8) = 'O2'    # for autothermal operation
 
 
 #_______________________________________________________________________
@@ -209,10 +211,15 @@
 
 #_______________________________________________________________________
 # Boundary conditions
-#   BC 1: bottom distributor - steam (+ N2 carrier) mass inflow
+#   BC 1: bottom distributor - steam + O2 (oxygen-blown, AUTOTHERMAL) inflow
 #   BC 2: top - pressure outflow
 
-  # --- BC 1: steam inlet (bottom) ---
+  # --- BC 1: steam + O2 inlet (bottom) ---
+  # AUTOTHERMAL: the O2 partially oxidizes char/CO/H2 (combustion reactions
+  # below), and that heat drives the endothermic gasification - so the walls
+  # are run ADIABATIC (no bc_tw_*). The O2 fraction sets the equivalence
+  # ratio / how hot the bed runs; raise it for more heat, lower it (-> 0)
+  # to revert toward an allothermal, externally-heated case.
   bc_type(1) = 'MI'
   bc_x_w(1) = 0.0   bc_x_e(1) = 0.10
   bc_y_s(1) = 0.0   bc_y_n(1) = 0.0
@@ -221,13 +228,14 @@
   bc_ep_g(1) = 1.0
   bc_p_g(1)  = 101325.0
   bc_t_g(1)  = 1123.15
-  bc_v_g(1)  = 0.40          # superficial steam velocity [m/s]
+  bc_v_g(1)  = 0.40          # superficial inlet velocity [m/s]
                              # sand-rich bed is heavier than char alone -
                              # check against Umf of the binary mixture and
                              # raise if the bed does not fluidize.
   bc_u_g(1)  = 0.0
-  bc_x_g(1,1) = 0.70         # H2O (steam)
-  bc_x_g(1,6) = 0.30         # N2 carrier / tracer
+  bc_x_g(1,1) = 0.55         # H2O (steam)
+  bc_x_g(1,8) = 0.25         # O2  (partial-oxidation heat source)
+  bc_x_g(1,6) = 0.20         # N2  carrier / tracer
 
   # --- BC 2: outlet (top) ---
   bc_type(2) = 'PO'
@@ -236,17 +244,15 @@
   bc_z_b(2) = 0.0   bc_z_t(2) = 0.01
   bc_p_g(2) = 101325.0
 
-  # --- BC 3/4: heated walls (ALLOTHERMAL heat source) -------------------
-  # Constant-temperature side walls supply the heat that drives the
-  # endothermic gasification. With BC_HW_T_* left unset, BC_TW_* is a
-  # fixed-temperature (Dirichlet) wall. To run adiabatic instead, delete
-  # the BC_TW_* lines (walls default to no-slip + adiabatic).
+  # --- BC 3/4/6: side walls (ADIABATIC for autothermal operation) ------
+  # No-slip walls with NO fixed temperature: the bed is heated by the
+  # partial-oxidation (combustion) reactions, not the walls. To run
+  # ALLOTHERMAL / hybrid instead, uncomment the bc_tw_* lines (fixed wall
+  # temperature) - and you can then lower or remove the inlet O2.
   bc_type(3) = 'NSW'
   bc_x_w(3)=0.0  bc_x_e(3)=0.0  bc_y_s(3)=0.0  bc_y_n(3)=1.0
   bc_z_b(3)=0.0  bc_z_t(3)=0.01
-  bc_tw_g(3)   = 1173.15
-  bc_tw_s(3,1) = 1173.15
-  bc_tw_s(3,2) = 1173.15
+  # bc_tw_g(3)=1173.15  bc_tw_s(3,1)=1173.15  bc_tw_s(3,2)=1173.15
 
   # East wall is SPLIT to leave a side opening that acts as the solids
   # OVERFLOW DRAIN (see below): lower wall (BC4) + overflow (BC5) + upper
@@ -254,16 +260,12 @@
   bc_type(4) = 'NSW'
   bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=0.28
   bc_z_b(4)=0.0  bc_z_t(4)=0.01
-  bc_tw_g(4)   = 1173.15
-  bc_tw_s(4,1) = 1173.15
-  bc_tw_s(4,2) = 1173.15
+  # bc_tw_g(4)=1173.15  bc_tw_s(4,1)=1173.15  bc_tw_s(4,2)=1173.15
 
   bc_type(6) = 'NSW'
   bc_x_w(6)=0.10 bc_x_e(6)=0.10 bc_y_s(6)=0.32 bc_y_n(6)=1.0
   bc_z_b(6)=0.0  bc_z_t(6)=0.01
-  bc_tw_g(6)   = 1173.15
-  bc_tw_s(6,1) = 1173.15
-  bc_tw_s(6,2) = 1173.15
+  # bc_tw_g(6)=1173.15  bc_tw_s(6,1)=1173.15  bc_tw_s(6,2)=1173.15
   # ---------------------------------------------------------------------
 
   # --- BC 5: solids OVERFLOW drain (side opening at the bed surface) -----
@@ -350,6 +352,14 @@
   # --- Devolatilization (gas-solid) ---
   Drying                  { chem_eq = 'Moisture --> H2O' }          # endothermic
   Pyrolysis { chem_eq = 'Biomass --> 0.30*Char + 0.37*CO + 0.10*CO2 + 0.05*CH4 + 0.48*H2 + 0.03*H2O + 0.03*Tar' }
+
+  # --- Combustion / partial oxidation (AUTOTHERMAL heat source) ---
+  #   Char(12)+O2(32)=44 -> CO2(44); CO+0.5O2 -> CO2; H2+0.5O2 -> H2O;
+  #   CH4+2O2 -> CO2+2H2O. All exothermic - these supply the bed heat.
+  Char_Combustion         { chem_eq = 'Char + O2 --> CO2' }        # exothermic
+  CO_Combustion           { chem_eq = 'CO + 0.5*O2 --> CO2' }      # exothermic
+  H2_Combustion           { chem_eq = 'H2 + 0.5*O2 --> H2O' }      # exothermic
+  CH4_Combustion          { chem_eq = 'CH4 + 2.0*O2 --> CO2 + 2.0*H2O' } # exothermic
 
   # --- Heterogeneous (gas-solid) char reactions ---
   Char_Gasification       { chem_eq = 'Char + H2O --> CO + H2' }   # endothermic

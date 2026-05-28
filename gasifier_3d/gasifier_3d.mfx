@@ -81,7 +81,7 @@
 
   mu_g0  = 3.5e-5
   dif_g0 = 2.0e-4            # constant gas mass diffusivity [m2/s]
-  nmax_g = 7
+  nmax_g = 8
   species_g(1) = 'H2O'      species_alias_g(1) = 'H2O'
   species_g(2) = 'CO'       species_alias_g(2) = 'CO'
   species_g(3) = 'H2'       species_alias_g(3) = 'H2'
@@ -89,6 +89,7 @@
   species_g(5) = 'CH4'      species_alias_g(5) = 'CH4'
   species_g(6) = 'N2'       species_alias_g(6) = 'N2'
   species_g(7) = 'C6H6'     species_alias_g(7) = 'Tar'
+  species_g(8) = 'O2'       species_alias_g(8) = 'O2'
 
 
 #_______________________________________________________________________
@@ -164,7 +165,7 @@
   bc_t_g(1) = 1123.15
   bc_v_g(1) = 0.40
   bc_u_g(1) = 0.0   bc_w_g(1) = 0.0
-  bc_x_g(1,1) = 0.70   bc_x_g(1,6) = 0.30
+  bc_x_g(1,1) = 0.55   bc_x_g(1,8) = 0.25   bc_x_g(1,6) = 0.20  # steam + O2 (autothermal)
 
   bc_type(2) = 'PO'
   bc_x_w(2) = 0.0   bc_x_e(2) = 0.10
@@ -172,24 +173,25 @@
   bc_z_b(2) = 0.0   bc_z_t(2) = 0.10
   bc_p_g(2) = 101325.0
 
-  # heated walls: x-min, x-max, z-min, z-max faces
+  # side walls: ADIABATIC for autothermal operation (combustion supplies
+  # the heat). Uncomment the bc_tw_* lines to run allothermal/hybrid.
   bc_type(3) = 'NSW'
   bc_x_w(3)=0.0 bc_x_e(3)=0.0 bc_y_s(3)=0.0 bc_y_n(3)=1.0 bc_z_b(3)=0.0 bc_z_t(3)=0.10
-  bc_tw_g(3)=1173.15  bc_tw_s(3,1)=1173.15  bc_tw_s(3,2)=1173.15
+  # bc_tw_g(3)=1173.15  bc_tw_s(3,1)=1173.15  bc_tw_s(3,2)=1173.15
 
   # x-max wall is SPLIT to leave a solids OVERFLOW drain (BC7) at the bed
   # surface: lower wall (BC4) + overflow PO (BC7) + upper wall (BC8).
   bc_type(4) = 'NSW'
   bc_x_w(4)=0.10 bc_x_e(4)=0.10 bc_y_s(4)=0.0 bc_y_n(4)=0.28 bc_z_b(4)=0.0 bc_z_t(4)=0.10
-  bc_tw_g(4)=1173.15  bc_tw_s(4,1)=1173.15  bc_tw_s(4,2)=1173.15
+  # bc_tw_g(4)=1173.15  bc_tw_s(4,1)=1173.15  bc_tw_s(4,2)=1173.15
 
   bc_type(5) = 'NSW'
   bc_x_w(5)=0.0 bc_x_e(5)=0.10 bc_y_s(5)=0.0 bc_y_n(5)=1.0 bc_z_b(5)=0.0 bc_z_t(5)=0.0
-  bc_tw_g(5)=1173.15  bc_tw_s(5,1)=1173.15  bc_tw_s(5,2)=1173.15
+  # bc_tw_g(5)=1173.15  bc_tw_s(5,1)=1173.15  bc_tw_s(5,2)=1173.15
 
   bc_type(6) = 'NSW'
   bc_x_w(6)=0.0 bc_x_e(6)=0.10 bc_y_s(6)=0.0 bc_y_n(6)=1.0 bc_z_b(6)=0.10 bc_z_t(6)=0.10
-  bc_tw_g(6)=1173.15  bc_tw_s(6,1)=1173.15  bc_tw_s(6,2)=1173.15
+  # bc_tw_g(6)=1173.15  bc_tw_s(6,1)=1173.15  bc_tw_s(6,2)=1173.15
 
   # BC7: solids overflow drain (side opening at the bed surface)
   bc_type(7) = 'PO'
@@ -199,7 +201,7 @@
   # BC8: x-max wall above the overflow
   bc_type(8) = 'NSW'
   bc_x_w(8)=0.10 bc_x_e(8)=0.10 bc_y_s(8)=0.32 bc_y_n(8)=1.0 bc_z_b(8)=0.0 bc_z_t(8)=0.10
-  bc_tw_g(8)=1173.15  bc_tw_s(8,1)=1173.15  bc_tw_s(8,2)=1173.15
+  # bc_tw_g(8)=1173.15  bc_tw_s(8,1)=1173.15  bc_tw_s(8,2)=1173.15
 
 
 #_______________________________________________________________________
@@ -238,6 +240,10 @@
   Rev_Water_Gas_Shift     { chem_eq = 'CO2 + H2 --> CO + H2O' }
   Steam_Methane_Reforming { chem_eq = 'CH4 + H2O --> CO + 3.0*H2' }
   Tar_Reforming           { chem_eq = 'Tar + 6.0*H2O --> 6.0*CO + 9.0*H2' }
+  Char_Combustion         { chem_eq = 'Char + O2 --> CO2' }
+  CO_Combustion           { chem_eq = 'CO + 0.5*O2 --> CO2' }
+  H2_Combustion           { chem_eq = 'H2 + 0.5*O2 --> H2O' }
+  CH4_Combustion          { chem_eq = 'CH4 + 2.0*O2 --> CO2 + 2.0*H2O' }
 @(END)
 
 

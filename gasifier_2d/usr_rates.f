@@ -12,10 +12,15 @@
 !    Rev_Water_Gas_Shift      CO2 + H2 --> CO + H2O
 !    Steam_Methane_Reforming  CH4 + H2O --> CO + 3 H2
 !    Tar_Reforming            C6H6 + 6 H2O --> 6 CO + 9 H2
+!    Char_Combustion          Char + O2 --> CO2          (autothermal)
+!    CO_Combustion            CO + 0.5 O2 --> CO2        (autothermal)
+!    H2_Combustion            H2 + 0.5 O2 --> H2O        (autothermal)
+!    CH4_Combustion           CH4 + 2 O2 --> CO2 + 2 H2O (autothermal)
 !
 !  RATE FORMS (literature-based):
 !    - Devolatilization (drying, pyrolysis) first order in the solid
 !      species (Chan et al. 1985).
+!    - Combustion mass-action (Westbrook & Dryer 1981; Smith 1982).
 !    - Char-steam and Boudouard use Langmuir-Hinshelwood (LH) forms, which
 !      capture the H2 / CO product inhibition seen in char gasification
 !      (Barrio & Hustad 2001; compiled in Gomez-Barea & Leckner, Prog.
@@ -69,7 +74,7 @@
       DOUBLE PRECISION :: mw_mix                ! gas mixture MW [kg/kmol]
       DOUBLE PRECISION :: p_H2O, p_CO2, p_CO, p_H2   ! partial pressure [bar]
       DOUBLE PRECISION :: c_H2O, c_CO, c_CO2, c_H2   ! conc [kmol/m3]
-      DOUBLE PRECISION :: c_CH4, c_Tar
+      DOUBLE PRECISION :: c_CH4, c_Tar, c_O2
       DOUBLE PRECISION :: c_Char                ! solid carbon [kmol/m3]
       DOUBLE PRECISION :: c_Bio, c_Moist        ! biomass / moisture [kmol/m3]
       DOUBLE PRECISION :: r1, r2                ! LH reactivities [1/s]
@@ -121,6 +126,17 @@
 !     et al. 1985 / Font et al.): A ~ 1e7 1/s, E ~ 140 kJ/mol.
       DOUBLE PRECISION, PARAMETER :: A12=1.0d7,  E12=1.40d8
 
+! --- Combustion / partial oxidation (autothermal heat source). Gas A's in
+!     SI (kmol,m3,s); refit/replace as for the other reactions.
+!   Char + O2 -> CO2 (char combustion; Smith, 19th Symp. Combust. 1982):
+      DOUBLE PRECISION, PARAMETER :: A13=5.0d2,  E13=1.40d8
+!   CO + 0.5 O2 -> CO2 (Westbrook & Dryer, Combust. Sci. Tech. 1981):
+      DOUBLE PRECISION, PARAMETER :: A14=1.0d10, E14=1.67d8
+!   H2 + 0.5 O2 -> H2O (representative fast oxidation):
+      DOUBLE PRECISION, PARAMETER :: A15=1.0d11, E15=1.10d8
+!   CH4 + 2 O2 -> CO2 + 2 H2O (Westbrook & Dryer 1981): E ~ 202 kJ/mol:
+      DOUBLE PRECISION, PARAMETER :: A16=2.0d8,  E16=2.02d8
+
 !---------------------------------------------------------------------
 
       RATES(:) = ZERO
@@ -149,6 +165,7 @@
       c_H2  = RO_g(IJK) * X_g(IJK,H2)  / MW_g(H2)
       c_CH4 = RO_g(IJK) * X_g(IJK,CH4) / MW_g(CH4)
       c_Tar = RO_g(IJK) * X_g(IJK,Tar) / MW_g(Tar)
+      c_O2  = RO_g(IJK) * X_g(IJK,O2)  / MW_g(O2)
 
 ! Solid-phase molar concentrations [kmol/m3]
       c_Char  = ROP_s(IJK,1) * X_s(IJK,1,Char)     / MW_s(1,Char)
@@ -211,6 +228,24 @@
 ! (7) Tar (benzene) steam reforming:  C6H6 + 6 H2O -> 6 CO + 9 H2
       IF (c_Tar > SMALL_NUMBER .AND. c_H2O > SMALL_NUMBER) THEN
          RATES(Tar_Reforming) = A10*EXP(-E10/(Rg*Tg)) * c_Tar * c_H2O
+      ENDIF
+
+!---------------------------------------------------------------------
+! Combustion / partial oxidation (autothermal heat source). Only active
+! where O2 is present (near the inlet); consumed fast.
+      IF (c_O2 > SMALL_NUMBER) THEN
+!   Char + O2 -> CO2   (heterogeneous, solids temp)
+         IF (c_Char > SMALL_NUMBER)                                      &
+            RATES(Char_Combustion) = A13*EXP(-E13/(Rg*Ts)) * c_O2 * c_Char
+!   CO + 0.5 O2 -> CO2
+         IF (c_CO > SMALL_NUMBER)                                        &
+            RATES(CO_Combustion)  = A14*EXP(-E14/(Rg*Tg)) * c_CO  * c_O2
+!   H2 + 0.5 O2 -> H2O
+         IF (c_H2 > SMALL_NUMBER)                                        &
+            RATES(H2_Combustion)  = A15*EXP(-E15/(Rg*Tg)) * c_H2  * c_O2
+!   CH4 + 2 O2 -> CO2 + 2 H2O
+         IF (c_CH4 > SMALL_NUMBER)                                       &
+            RATES(CH4_Combustion) = A16*EXP(-E16/(Rg*Tg)) * c_CH4 * c_O2
       ENDIF
 
       RETURN
