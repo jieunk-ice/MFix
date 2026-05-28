@@ -42,6 +42,7 @@ gasifier_2d/   2D reacting case + usr_rates.f, usr0.f, usr1.f
 gasifier_3d/   3D version + grid-independence presets (own usr_*.f copies)
 coldflow_2d/   hydrodynamics-only sand case (standard solver, no build)
 postprocess.py results analysis (syngas, performance, carbon, recirc, axial)
+dashboard.py   one-command HTML results dashboard (KPI cards + charts)
 run_case.sh    build + run one case
 sweep.py       parameter sweeps + grid-independence study (drives the solver)
 report.md      this document
@@ -186,6 +187,18 @@ reads the monitor CSVs and reports:
 return, and side-overflow char flux — so the balance closes from the run plus
 the feed constants (`CHAR_FEED_KG_S`, `CHAR_FRACTION`, `CYCLONE_ETA` in
 `postprocess.py`, which must match the deck).
+
+### Dashboard
+
+For a visual, at-a-glance view, `python dashboard.py <results_dir> -o
+dashboard.html --open` writes one self-contained HTML page: KPI cards (H₂/CO,
+syngas LHV, dry gas yield, cold-gas efficiency, carbon conversion, tar yield)
+and charts for syngas composition, outlet species vs time, the cyclone
+char-return loop, bed-char inventory, and the axial T/CO/H₂ profiles. It
+imports `postprocess.py`'s parsers and constants — so the figures match the CLI
+report — needs no server and no dependency beyond `pandas` + `matplotlib`, and
+shows a placeholder for any monitor CSV that is absent (so a partial results
+directory still renders).
 
 ## 9. Assumptions and limitations
 
