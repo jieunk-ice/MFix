@@ -56,5 +56,11 @@ set `RESULTS_DIR` in the workflow to it, and delete the sample-generation
 step. (The Streamlit app can't run on Pages — Pages is static hosting only;
 use it locally.)
 
+To preview the page **before merging**, the `dashboard-preview.yml` workflow
+builds it on pull requests and uploads the HTML as a downloadable artifact
+(PR → "Dashboard preview" check → Artifacts → `dashboard-preview`). For a
+branch that hasn't merged yet, run it manually: Actions → Dashboard preview →
+Run workflow → pick the branch.
+
 One MFiX project per directory (all `.f` in a directory compile into that
 project's custom solver).

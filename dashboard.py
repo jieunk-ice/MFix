@@ -351,13 +351,23 @@ def build_html(results_dir: str, tail: float) -> str:
     if missing_list:
         sources += "<br>missing: " + ", ".join(missing_list)
 
+    # Repo / report links — filled automatically when built in GitHub Actions
+    # (GITHUB_REPOSITORY is set there); absent for local builds.
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    repo_links = (
+        f'Repository: <a href="{server}/{repo}">{repo}</a> &nbsp;&bull;&nbsp; '
+        f'<a href="{server}/{repo}/blob/HEAD/report.md">model report</a><br>'
+        if repo else "")
+
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MFiX gasifier dashboard &mdash; {os.path.basename(abs_dir) or abs_dir}</title>
 <style>{_CSS}</style></head><body>
 <header>
   <h1>MFiX biomass gasifier &mdash; results dashboard</h1>
-  <div class="sub">{abs_dir} &nbsp;&bull;&nbsp; tail-averaged over last {tail:.0%} of run
+  <div class="sub">Two-Fluid Model fluidized-bed steam gasifier
+   &nbsp;&bull;&nbsp; tail-averaged over last {tail:.0%} of run
    &nbsp;&bull;&nbsp; generated {now}</div>
 </header>
 <main>
@@ -365,7 +375,7 @@ def build_html(results_dir: str, tail: float) -> str:
   <div class="grid">{''.join(panel_html)}</div>
 </main>
 <footer>
-  Sources &mdash; {sources}.<br>
+  {repo_links}Sources &mdash; {sources}.<br>
   Performance &amp; carbon-balance KPIs use the feed assumptions in
   <code>postprocess.py</code> (BIOMASS_* / CYCLONE_ETA); keep them in sync with the deck.
 </footer>

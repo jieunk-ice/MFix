@@ -1,0 +1,51 @@
+name: Dashboard preview
+
+# Builds the dashboard on pull requests (and on manual dispatch) and uploads
+# the HTML as a downloadable artifact, so you can eyeball the page before
+# merging to the default branch — no GitHub Pages setup required.
+#
+# Where to find it: open the PR (or the Actions run) -> the "Dashboard
+# preview" check -> Artifacts -> download "dashboard-preview" -> unzip ->
+# open index.html in a browser.
+#
+# Note: for `pull_request` events GitHub uses the workflow file from the base
+# branch, so this auto-runs on PRs only once it has merged to the default
+# branch. To preview a not-yet-merged branch, run it manually: Actions tab ->
+# Dashboard preview -> Run workflow -> pick the branch.
+
+on:
+  pull_request:
+    paths:
+      - "dashboard.py"
+      - "postprocess.py"
+      - "sample_results/**"
+      - ".github/workflows/dashboard-preview.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pandas matplotlib
+
+      - name: Generate sample results (synthetic demo data)
+        run: python sample_results/make_sample.py sample_results
+
+      - name: Build dashboard
+        run: python dashboard.py sample_results -o index.html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-preview
+          path: index.html
+          if-no-files-found: error
